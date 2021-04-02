@@ -1,0 +1,101 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "compounds": [
+        {
+            "name": "Launch gisaid_tests",
+            "configurations": [
+                "print_help",
+                "basic_test",
+                // "no_submitter",
+                "multiple_tables_search",
+                "multiple_tables_indir",
+                "specific_tables",
+            ],
+        }
+    ],
+    "configurations": [
+        {
+            "name": "print_help",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/dummy_dir",
+            "args": [
+                "-h"
+            ],
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "basic_test",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test",
+            "args": [
+                "dmack_33",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "no_submitter",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "--indir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/no_submitter",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "multiple_tables_search",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_search",
+            "args": [
+                "dmack_33",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "multiple_tables_indir",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/dummy_dir",
+            "args": [
+                "dmack_33",
+                "--indir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_search",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_indir",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "specific_tables",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/dummy_dir",
+            "args": [
+                "dmack_33",
+                "--terra",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_search/CoV024-M5130-210315_terra.tsv",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_search/CoV025-M4796-210318_terra.tsv",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/specific_tables/CoV026-M4796-210322.tsv",
+                "--dashboard",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/specific_tables/20210323_dashboard_dump.xlsx",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/specific_tables",
+            ],
+            "console": "integratedTerminal"
+        },
+    ],
+}
