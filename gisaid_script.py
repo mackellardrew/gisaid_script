@@ -2,8 +2,6 @@
 
 import argparse
 import datetime
-import logging
-import logging.handlers
 import os
 import pathlib
 import re
@@ -14,6 +12,7 @@ import pandas as pd
 from Bio import SeqIO
 from functools import partial
 from glob import glob
+from tqdm import tqdm
 
 
 parser = argparse.ArgumentParser()
@@ -32,7 +31,11 @@ parser.add_argument(
 parser.add_argument(
     "-t",
     "--terra",
-    help="File path to the table of results from Terra",
+    help=(
+        "File path to the table of results from Terra; "
+        "can be a list, with each item preceded by the "
+        "'-t' or '--terra' flag."
+    ),
     nargs="*",
     dest="terra_table",
     default=None,
@@ -50,9 +53,10 @@ parser.add_argument(
     "--vocs",
     help=(
         "File path to a list of variants of concern/interest. "
-        "File should have two columns: VOC and VOI, with "
-        "Nextclade clade designations or Pango Lineages listed "
-        "underneath for variants of concern and interest, respectively"
+        "File should have two columns: VOC and VOI, named "
+        "on the first line, with Nextclade clade designations "
+        "or Pango Lineages listed underneath for variants of "
+        "concern and interest, respectively"
     ),
     type=argparse.FileType("r"),
     dest="voc_list",
@@ -161,9 +165,6 @@ dashboard_df.columns = ["_".join(col.lower().split()) for col in dashboard_df.co
 
 df = pd.merge(terra_df, dashboard_df, left_on="wa_no", right_on="folderno", how="left")
 
-# Should get IT to change this; this line may become unneccessary
-df["seq_id"] = df["seq_id"].str.replace("hCoV", "hCoV-19")
-
 # Download Assemblies
 assembly_dir = os.path.join(OUTDIR, "assemblies")
 pathlib.Path(assembly_dir).mkdir(exist_ok=True)
@@ -180,16 +181,11 @@ def gsutil_download(row):
     stderrs.update({wa_no: stderr.decode("utf-8")})
 
 
-# Note: the assembly download execution step is the most
-# Costly & time-intensive; comment out line below if they're already present
-empty_S = terra_df[["wa_no", "consensus_seq"]].apply(gsutil_download, axis=1)
-
-
 # Configure output metadata spreadsheet
 new_fields = {
     ("submitter", "Submitter"): SUBMITTER,
     ("fn", "FASTA filename"): "all_sequences.fasta",
-    ("covv_virus_name", "Virus name"): df["seq_id"].str.replace("hCoV", "hCoV-19"),
+    ("covv_virus_name", "Virus name"): df["seq_id"],
     ("covv_type", "Type"): "betacoronavirus",
     ("covv_passage", "Passage details/history"): "Original",
     ("covv_collection_date", "Collection date"): df["collected_date"],
@@ -222,10 +218,12 @@ new_fields = {
     ): "Washington State Department of Health Public Health Laboratories",
     ("covv_subm_lab_addr", "Address"): "1610 NE 150th St., Shoreline, WA 98155",
     ("covv_subm_sample_id", "Sample ID given by the submitting laboratory"): None,
-    (
-        "covv_authors",
-        "Authors",
-    ): "Drew MacKellar, Philip Dykema, Denny Russell, Joenice Gonzalez, Hannah Gray, Geoff Melly, Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, Avi Singh, Rebecca Cao",
+    ("covv_authors", "Authors",): (
+        "Drew MacKellar, Philip Dykema, Denny Russell, "
+        "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
+        "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
+        "Avi Singh, Rebecca Cao"
+    ),
     ("covv_comment", "Comment"): None,
     ("comment_type", "Comment Icon"): None,
 }
@@ -237,14 +235,6 @@ new_output_df = (
 )
 new_output_df.dropna(axis=0, subset=[("covv_virus_name", "Virus name")], inplace=True)
 
-# Output consolidated metadata as Excel and/or CSV
-outpath = os.path.join(OUTDIR, "gisaid_metadata.xls")
-# new_output_df.set_index(('submitter', 'Submitter')).to_excel(outpath)
-new_output_df.to_excel(outpath)
-outpath = os.path.join(OUTDIR, "gisaid_metadata.csv")
-new_out_df = new_output_df.droplevel(1, axis=1)
-new_out_df.set_index("submitter").to_csv(outpath)
-print(f"GISAID metadata file written to {outpath}")
 
 # Gather assemblies and output with new header lines
 file_df = (
@@ -273,12 +263,37 @@ def gather_seqs(row, out_buffer):
         pass
 
 
-all_seq_path = os.path.join(OUTDIR, "all_sequences.fa")
-with open(all_seq_path, "w") as out_buffer:
-    empty_S2 = file_df[["seq_id", "consensus_file"]].apply(
-        gather_seqs, axis=1, out_buffer=out_buffer
+def main():
+    # Note: the assembly download execution step is the most
+    # Costly & time-intensive; comment out line below if they're already present
+    print(
+        "Downloading consensus genome assemblies "
+        "from the cloud; this may take some time..."
     )
-print(f"Consolidated genome assemblies written to {all_seq_path}")
+    tqdm.pandas()
+    empty_S = terra_df[["wa_no", "consensus_seq"]].progress_apply(
+        gsutil_download, axis=1
+    )
 
-print("Done")
+    # Output consolidated metadata as Excel and/or CSV
+    # outpath = os.path.join(OUTDIR, "gisaid_metadata.xls")
+    # new_output_df.set_index(('submitter', 'Submitter')).to_excel(outpath)
+    # new_output_df.to_excel(outpath)
+    outpath = os.path.join(OUTDIR, "gisaid_metadata.csv")
+    new_out_df = new_output_df.droplevel(1, axis=1)
+    new_out_df.set_index("submitter").to_csv(outpath)
+    print(f"GISAID metadata file written to {outpath}")
+
+    all_seq_path = os.path.join(OUTDIR, "all_sequences.fa")
+    with open(all_seq_path, "w") as out_buffer:
+        empty_S2 = file_df[["seq_id", "consensus_file"]].apply(
+            gather_seqs, axis=1, out_buffer=out_buffer
+        )
+    print(f"Consolidated genome assemblies written to {all_seq_path}")
+
+    print("Done")
+
+
+if __name__ == "__main__":
+    main()
 
