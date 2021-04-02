@@ -6,6 +6,7 @@
     "compounds": [
         {
             "name": "Launch gisaid_tests",
+            "python.pythonPath": "/home/dcm0303/python/envs/cloud/bin/python",
             "configurations": [
                 "print_help",
                 "basic_test",
