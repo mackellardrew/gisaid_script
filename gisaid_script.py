@@ -263,6 +263,33 @@ def gather_seqs(row, out_buffer):
         pass
 
 
+def stderr_handling():
+    failures = [sample for sample, msg in stderrs.items() if "Exception" in msg]
+    if len(failures) > 0:
+        print(
+            "NOTE: the following sequences could not "
+            "be downloaded successfully and will be omitted "
+            "from the outputs:",
+            "\n".join(sample for sample in failures),
+            sep="\n",
+        )
+    stderrs_msgs = " ".join(stderrs.values())
+    if "AccessDeniedException" in stderrs_msgs:
+        access_msg = (
+            "NOTE: Cannot access the stored object(s); "
+            "please run 'gsutil config' before re-running "
+            "script."
+        )
+        print(access_msg)
+    elif "CommandException" in stderrs_msgs:
+        url_msg = (
+            "Please check formatting of 'consensus_seq' "
+            "column in input Terra tables for samples "
+            "listed above."
+        )
+        print(url_msg)
+
+
 def main():
     # Note: the assembly download execution step is the most
     # Costly & time-intensive; comment out line below if they're already present
@@ -274,6 +301,7 @@ def main():
     empty_S = terra_df[["wa_no", "consensus_seq"]].progress_apply(
         gsutil_download, axis=1
     )
+    stderr_handling()
 
     # Output consolidated metadata as Excel and/or CSV
     # outpath = os.path.join(OUTDIR, "gisaid_metadata.xls")
