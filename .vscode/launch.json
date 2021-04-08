@@ -14,10 +14,22 @@
                 "multiple_tables_search",
                 "multiple_tables_indir",
                 "specific_tables",
+                "bad_counties",
             ],
         }
     ],
     "configurations": [
+        {
+            "name": "bad_counties",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties",
+            "args": [
+                "dmack_33",
+            ]
+        },
         {
             "name": "bad_assembly_paths",
             "type": "python",
@@ -28,8 +40,7 @@
                 "dmack_33"
             ],
             "console": "integratedTerminal",
-        }
-
+        },
         {
             "name": "print_help",
             "type": "python",

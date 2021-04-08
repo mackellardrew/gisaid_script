@@ -163,7 +163,9 @@ terra_df["wa_no"] = terra_df["sample_name"].str.extract(pattern)
 
 dashboard_df.columns = ["_".join(col.lower().split()) for col in dashboard_df.columns]
 
-df = pd.merge(terra_df, dashboard_df, left_on="wa_no", right_on="folderno", how="left")
+merged_df = pd.merge(
+    terra_df, dashboard_df, left_on="wa_no", right_on="folderno", how="left"
+)
 
 # Download Assemblies
 assembly_dir = os.path.join(OUTDIR, "assemblies")
@@ -181,67 +183,82 @@ def gsutil_download(row):
     stderrs.update({wa_no: stderr.decode("utf-8")})
 
 
-# Configure output metadata spreadsheet
-new_fields = {
-    ("submitter", "Submitter"): SUBMITTER,
-    ("fn", "FASTA filename"): "all_sequences.fasta",
-    ("covv_virus_name", "Virus name"): df["seq_id"],
-    ("covv_type", "Type"): "betacoronavirus",
-    ("covv_passage", "Passage details/history"): "Original",
-    ("covv_collection_date", "Collection date"): df["collected_date"],
-    ("covv_location", "Location"): df["county"].apply(
-        lambda x: f"North America / USA / Washington / {x}"
-    ),
-    ("covv_add_location", "Additional location information"): None,
-    ("covv_host", "Host"): "Human",
-    ("covv_add_host_info", "Additional host information"): None,
-    ("covv_sampling_strategy", "Sampling Strategy"): None,
-    ("covv_gender", "Gender"): "unknown",
-    ("covv_patient_age", "Patient age"): "unknown",
-    ("covv_patient_status", "Patient status"): "unknown",
-    ("covv_specimen", "Specimen source"): None,
-    ("covv_outbreak", "Outbreak"): None,
-    ("covv_last_vaccinated", "Last vaccinated"): None,
-    ("covv_treatment", "Treatment"): None,
-    ("covv_seq_technology", "Sequencing technology"): "Illumina MiSeq",
-    ("covv_assembly_method", "Assembly method"): df["ivar_version_consensus"],
-    ("covv_coverage", "Coverage"): df["depth_trim"],
-    (
-        "covv_orig_lab",
-        "Originating lab",
-    ): "Washington State Department of Health Public Health Laboratories",
-    ("covv_orig_lab_addr", "Address"): "1610 NE 150th St., Shoreline, WA 98155",
-    ("covv_provider_sample_id", "Sample ID given by originating laboratory"): None,
-    (
-        "covv_subm_lab",
-        "Submitting lab",
-    ): "Washington State Department of Health Public Health Laboratories",
-    ("covv_subm_lab_addr", "Address"): "1610 NE 150th St., Shoreline, WA 98155",
-    ("covv_subm_sample_id", "Sample ID given by the submitting laboratory"): None,
-    ("covv_authors", "Authors",): (
-        "Drew MacKellar, Philip Dykema, Denny Russell, "
-        "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
-        "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
-        "Avi Singh, Rebecca Cao"
-    ),
-    ("covv_comment", "Comment"): None,
-    ("comment_type", "Comment Icon"): None,
-}
+def handle_counties(county):
+    valid_wa_counties = "'adams; asotin; benton; chelan; clallam; clark; columbia; cowlitz; douglas; ferry; franklin; garfield; grant; grays harbor; island; jefferson; king; kitsap; kittitas; klickitat; lewis; lincoln; mason; okanogan; pacific; pend oreille; pierce; san juan; skagit; skamania; snohomish; spokane; stevens; thurston; wahkiakum; walla walla; whatcom; whitman; yakima'".split(
+        "; "
+    )
 
-new_output_df = (
-    pd.DataFrame(new_fields)
-    .sort_values(("covv_virus_name", "Virus name"))
-    .reset_index(drop=True)
-)
-new_output_df.dropna(axis=0, subset=[("covv_virus_name", "Virus name")], inplace=True)
+    if county.lower() in valid_wa_counties:
+        return_str = f"North America / USA / Washington / {county.capitalize()}"
+    else:
+        return_str = f"North America / USA / Washington"
+    return return_str
+
+
+def prep_metadata(df):
+    # Configure output metadata spreadsheet
+    new_fields = {
+        ("submitter", "Submitter"): SUBMITTER,
+        ("fn", "FASTA filename"): "all_sequences.fasta",
+        ("covv_virus_name", "Virus name"): df["seq_id"],
+        ("covv_type", "Type"): "betacoronavirus",
+        ("covv_passage", "Passage details/history"): "Original",
+        ("covv_collection_date", "Collection date"): df["collected_date"],
+        ("covv_location", "Location"): df["county"].fillna("").apply(handle_counties),
+        ("covv_add_location", "Additional location information"): None,
+        ("covv_host", "Host"): "Human",
+        ("covv_add_host_info", "Additional host information"): None,
+        ("covv_sampling_strategy", "Sampling Strategy"): None,
+        ("covv_gender", "Gender"): "unknown",
+        ("covv_patient_age", "Patient age"): "unknown",
+        ("covv_patient_status", "Patient status"): "unknown",
+        ("covv_specimen", "Specimen source"): None,
+        ("covv_outbreak", "Outbreak"): None,
+        ("covv_last_vaccinated", "Last vaccinated"): None,
+        ("covv_treatment", "Treatment"): None,
+        ("covv_seq_technology", "Sequencing technology"): "Illumina MiSeq",
+        ("covv_assembly_method", "Assembly method"): df["ivar_version_consensus"],
+        ("covv_coverage", "Coverage"): df["depth_trim"],
+        (
+            "covv_orig_lab",
+            "Originating lab",
+        ): "Washington State Department of Health Public Health Laboratories",
+        ("covv_orig_lab_addr", "Address"): "1610 NE 150th St., Shoreline, WA 98155",
+        ("covv_provider_sample_id", "Sample ID given by originating laboratory"): None,
+        (
+            "covv_subm_lab",
+            "Submitting lab",
+        ): "Washington State Department of Health Public Health Laboratories",
+        ("covv_subm_lab_addr", "Address"): "1610 NE 150th St., Shoreline, WA 98155",
+        ("covv_subm_sample_id", "Sample ID given by the submitting laboratory"): None,
+        ("covv_authors", "Authors",): (
+            "Drew MacKellar, Philip Dykema, Denny Russell, "
+            "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
+            "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
+            "Avi Singh, Rebecca Cao"
+        ),
+        ("covv_comment", "Comment"): None,
+        ("comment_type", "Comment Icon"): None,
+    }
+
+    new_output_df = (
+        pd.DataFrame(new_fields)
+        .sort_values(("covv_virus_name", "Virus name"))
+        .reset_index(drop=True)
+    )
+    new_output_df.dropna(
+        axis=0, subset=[("covv_virus_name", "Virus name")], inplace=True
+    )
+
+    return new_output_df
 
 
 # Gather assemblies and output with new header lines
 file_df = (
-    df[["wa_no", "seq_id", "consensus_seq"]]
+    merged_df[["wa_no", "seq_id", "consensus_seq"]]
     .copy()
     .sort_values("seq_id")
-    .dropna(axis=0, subset=["seq_id", "consensus_seq"])
+    # .dropna(axis=0, subset=["seq_id", "consensus_seq"])
 )
 
 new_pattern = r".*/(?:call-consensus|cacheCopy)/(.*)"
@@ -251,20 +268,24 @@ file_df["consensus_file"] = (
 
 
 def gather_seqs(row, out_buffer):
-    seq_id, seq_path = row["seq_id"], row["consensus_file"]
+    # wa_no, seq_id, seq_path = row['wa_no'], row["seq_id"], row["consensus_file"]
     try:
-        with open(seq_path, "r") as seq_buffer:
+        with open(row["consensus_file"], "r") as seq_buffer:
             rec = next(SeqIO.parse(seq_buffer, "fasta"))
-            rec.id = seq_id
+            rec.id = row["seq_id"]
             rec.description = ""
             # print(rec.description)
             SeqIO.write(rec, out_buffer, "fasta")
-    except FileNotFoundError:
-        pass
+    except (TypeError, FileNotFoundError) as err:
+        stderrs[row["wa_no"]] = err
 
 
 def stderr_handling():
-    failures = [sample for sample, msg in stderrs.items() if "Exception" in msg]
+    failures = [
+        sample
+        for sample, msg in stderrs.items()
+        if ("Exception" in msg) or ("Error" in msg)
+    ]
     if len(failures) > 0:
         print(
             "NOTE: the following sequences could not "
@@ -281,13 +302,15 @@ def stderr_handling():
             "script."
         )
         print(access_msg)
-    elif "CommandException" in stderrs_msgs:
+    elif ("CommandException" in stderrs_msgs) or ("Error" in stderrs_msgs):
         url_msg = (
             "Please check formatting of 'consensus_seq' "
             "column in input Terra tables for samples "
             "listed above."
         )
         print(url_msg)
+
+    return failures
 
 
 def main():
@@ -298,15 +321,11 @@ def main():
         "from the cloud; this may take some time..."
     )
     tqdm.pandas()
-    empty_S = terra_df[["wa_no", "consensus_seq"]].progress_apply(
-        gsutil_download, axis=1
-    )
-    stderr_handling()
+    _ = terra_df[["wa_no", "consensus_seq"]].progress_apply(gsutil_download, axis=1)
+    not_downloaded = stderr_handling()
+    new_df = merged_df[~merged_df["wa_no"].isin(not_downloaded)]
+    new_output_df = prep_metadata(new_df)
 
-    # Output consolidated metadata as Excel and/or CSV
-    # outpath = os.path.join(OUTDIR, "gisaid_metadata.xls")
-    # new_output_df.set_index(('submitter', 'Submitter')).to_excel(outpath)
-    # new_output_df.to_excel(outpath)
     outpath = os.path.join(OUTDIR, "gisaid_metadata.csv")
     new_out_df = new_output_df.droplevel(1, axis=1)
     new_out_df.set_index("submitter").to_csv(outpath)
@@ -314,9 +333,7 @@ def main():
 
     all_seq_path = os.path.join(OUTDIR, "all_sequences.fa")
     with open(all_seq_path, "w") as out_buffer:
-        empty_S2 = file_df[["seq_id", "consensus_file"]].apply(
-            gather_seqs, axis=1, out_buffer=out_buffer
-        )
+        _ = file_df.apply(gather_seqs, axis=1, out_buffer=out_buffer)
     print(f"Consolidated genome assemblies written to {all_seq_path}")
 
     print("Done")
