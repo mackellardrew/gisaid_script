@@ -2,16 +2,19 @@
 
 import argparse
 import datetime
+import logging
 import os
 import pathlib
 import re
 import shlex
 import subprocess
 import sys
+import numpy as np
 import pandas as pd
 from Bio import SeqIO
 from functools import partial
 from glob import glob
+from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
 
 
@@ -58,7 +61,7 @@ parser.add_argument(
         "or Pango Lineages listed underneath for variants of "
         "concern and interest, respectively"
     ),
-    type=argparse.FileType("r"),
+    type=str,
     dest="voc_list",
     default=None,
 )
@@ -82,9 +85,17 @@ parser.add_argument(
     dest="gsutil_path",
     default="gsutil",
 )
+parser.add_argument(
+    "--no_auto_qc",
+    help=("If TRUE, ignore genome QC criteria in generating outputs"),
+    type=bool,
+    dest="no_auto_qc",
+    default=False,
+)
 
 user_args = vars(parser.parse_args())
 INDIR = user_args.get("indir")
+
 
 # For ease of use, look for the files in INDIR
 for key in ("terra_table", "dashboard_table"):
@@ -104,15 +115,17 @@ for key in ("terra_table", "dashboard_table"):
             print(missing_input_message)
             sys.exit()
 
+
 SUBMITTER = user_args.get("submitter")
 TERRA_TABLE = user_args.get("terra_table")
 DASHBOARD_TABLE = user_args.get("dashboard_table")
 OUTDIR = user_args.get("outdir")
 VOC_LIST = user_args.get("voc_list")
 GSUTIL_PATH = user_args.get("gsutil_path")
+NO_AUTO_QC = user_args.get("no_auto_qc")
 
-# For additional ease of use, attempt to determine whether TSV, CSV, or Excel
-extension_handlers = {
+ASSEMBLY_DIR = os.path.join(OUTDIR, "assemblies")
+EXTENSION_HANDLERS = {
     ".csv": pd.read_csv,
     ".tsv": partial(pd.read_csv, sep="\t"),
     ".txt": partial(pd.read_csv, sep="\t"),
@@ -121,82 +134,135 @@ extension_handlers = {
 }
 
 
-def infer_input_format(filepath):
-    _, ext = os.path.splitext(filepath)
-    df = extension_handlers.get(ext, pd.read_excel)(filepath)
-    return df
+def setup_logger(output_dir):
+    """Returns a logger object writing to 'gisaid_script_logs.txt'."""
+    log_filename = "gisaid_script_logs.txt"
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    logger = logging.getLogger("gisaid_script_logger")
+    logger.setLevel(logging.INFO)
+    handler = logging.FileHandler(log_filename)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.addHandler(logging.StreamHandler())
 
-
-if VOC_LIST:
-    _, voc_ext = os.path.splitext(VOC_LIST)
-    voc_df = extension_handlers.get(voc_ext)(VOC_LIST)
-else:
-    voc_df = None
+    return logger
 
 
 def load_tables(table_list, terra_table=False):
+    """Load input tables and consolidate into pandas DataFrames"""
+
+    def load_single_table(filepath):
+        """Attempt to determine whether a given file is 
+        TSV, CSV, or Excel, and return the given table as 
+        a pandas DataFrame"""
+        _, ext = os.path.splitext(filepath)
+        df = EXTENSION_HANDLERS.get(ext, pd.read_excel)(filepath)
+        return df
+
     df_list = list()
     for table in table_list:
-        df = infer_input_format(table)
+        single_df = load_single_table(table)
         if terra_table:
-            cols = df.columns.copy().tolist()
+            cols = single_df.columns.copy().tolist()
             cols[0] = "sample_name"
-            df.columns = cols
-        df_list.append(df)
+            single_df.columns = cols
+        df_list.append(single_df)
     df = pd.concat(df_list)
     return df
 
 
-dashboard_df = load_tables(DASHBOARD_TABLE)
-terra_df = load_tables(TERRA_TABLE, terra_table=True)
+def merge_tables(terra_df: pd.DataFrame, dashboard_df: pd.DataFrame):
+    """Merges the Dashboard and Terra tables, and reformats slightly"""
+    pattern = ".*(WA[0-9]{7}).*"
+    terra_df["wa_no"] = terra_df["sample_name"].str.extract(pattern)
 
-for df, path in zip((dashboard_df, terra_df), (DASHBOARD_TABLE, TERRA_TABLE)):
-    if df.shape[0] < 1:
-        bad_input_message = (
-            f"Could not interpret or could not find appropriate data "
-            "in {path}; please check format of input file and try again."
-        )
-        sys.exit()
+    dashboard_df.columns = [
+        "_".join(col.lower().split()) for col in dashboard_df.columns
+    ]
 
-pattern = ".*(WA[0-9]{7}).*"
-terra_df["wa_no"] = terra_df["sample_name"].str.extract(pattern)
-
-dashboard_df.columns = ["_".join(col.lower().split()) for col in dashboard_df.columns]
-
-merged_df = pd.merge(
-    terra_df, dashboard_df, left_on="wa_no", right_on="folderno", how="left"
-)
-
-# Download Assemblies
-assembly_dir = os.path.join(OUTDIR, "assemblies")
-pathlib.Path(assembly_dir).mkdir(exist_ok=True)
-pipes = {key: subprocess.PIPE for key in ("stdout", "stderr")}
-stdouts, stderrs = dict(), dict()
-
-
-def gsutil_download(row):
-    wa_no, url = row[0], row[1]
-    cmd = f"{GSUTIL_PATH} cp {url} {assembly_dir}"
-    proc = subprocess.Popen(shlex.split(cmd), **pipes)
-    stdout, stderr = proc.communicate()
-    stdouts.update({wa_no: stdout.decode("utf-8")})
-    stderrs.update({wa_no: stderr.decode("utf-8")})
-
-
-def handle_counties(county):
-    valid_wa_counties = "'adams; asotin; benton; chelan; clallam; clark; columbia; cowlitz; douglas; ferry; franklin; garfield; grant; grays harbor; island; jefferson; king; kitsap; kittitas; klickitat; lewis; lincoln; mason; okanogan; pacific; pend oreille; pierce; san juan; skagit; skamania; snohomish; spokane; stevens; thurston; wahkiakum; walla walla; whatcom; whitman; yakima'".split(
-        "; "
+    merged_df = pd.merge(
+        terra_df, dashboard_df, left_on="wa_no", right_on="folderno", how="left"
     )
+    return merged_df
+
+
+def auto_qc(merged_df: pd.DataFrame, logger: logging.Logger):
+    conditions = (merged_df["amp_fail"] > 40) | (merged_df["coverage_trim"] < 60)
+    key_metrics = ["amp_fail", "coverage_trim"]
+    bad_samples = merged_df[conditions]["wa_no"].dropna().tolist()
+    if len(bad_samples) > 0:
+        auto_qc_msg = "\n".join(
+            [
+                (
+                    "The following samples failed to meet the minimum QC metrics "
+                    f"set for genome quality (currently {key_metrics})"
+                ),
+                *bad_samples,
+                "and will be omitted from the outputs",
+            ]
+        )
+        print(auto_qc_msg)
+        logger.warning(auto_qc_msg)
+    return bad_samples
+
+
+def download_assemblies(merged_df: pd.DataFrame):
+    """For each sample represented in the Terra results, attempts to 
+    download the corresponding genome assembly"""
+    from tqdm.auto import tqdm
+
+    pathlib.Path(ASSEMBLY_DIR).mkdir(exist_ok=True)
+    pipes = {key: subprocess.PIPE for key in ("stdout", "stderr")}
+    download_stdouts, download_stderrs = dict(), dict()
+
+    def gsutil_download(row):
+        wa_no, url = row[0], row[1]
+        cmd = f"{GSUTIL_PATH} cp {url} {ASSEMBLY_DIR}"
+        proc = subprocess.Popen(shlex.split(cmd), **pipes)
+        stdout, stderr = proc.communicate()
+        download_stdouts.update({wa_no: stdout.decode("utf-8")})
+        download_stderrs.update({wa_no: stderr.decode("utf-8")})
+
+    # tqdm.pandas()
+    _ = merged_df[["wa_no", "consensus_seq"]].apply(gsutil_download, axis=1)
+
+    return download_stdouts, download_stderrs
+
+
+def handle_counties(county: str):
+    """Ensure that any fields reported for the County in which sample 
+    was collected are validly named WA counties; else return just state 
+    for localization field in metadata"""
+    wa_counties_lower = (
+        "adams; asotin; benton; chelan; clallam; clark; columbia; cowlitz; "
+        "douglas; ferry; franklin; garfield; grant; grays harbor; island; "
+        "jefferson; king; kitsap; kittitas; klickitat; lewis; lincoln; mason; "
+        "okanogan; pacific; pend oreille; pierce; san juan; skagit; skamania; "
+        "snohomish; spokane; stevens; thurston; wahkiakum; walla walla; "
+        "whatcom; whitman; yakima"
+    ).split("; ")
+    valid_wa_counties = {
+        county: (
+            " ".join(word.capitalize())
+            if len(county.split()) > 1
+            else county.capitalize()
+        )
+        for word in county.split()
+        for county in wa_counties_lower
+    }
+    no_county = "North America / USA / Washington"
 
     if county.lower() in valid_wa_counties:
-        return_str = f"North America / USA / Washington / {county.capitalize()}"
+        return_str = f"{no_county} / {valid_wa_counties[county.lower()]} County"
     else:
-        return_str = f"North America / USA / Washington"
+        return_str = no_county
     return return_str
 
 
-def prep_metadata(df):
-    # Configure output metadata spreadsheet
+def prep_metadata(df: pd.DataFrame):
+    """Configure output metadata spreadsheet"""
     new_fields = {
         ("submitter", "Submitter"): SUBMITTER,
         ("fn", "FASTA filename"): "all_sequences.fasta",
@@ -253,88 +319,214 @@ def prep_metadata(df):
     return new_output_df
 
 
-# Gather assemblies and output with new header lines
-file_df = (
-    merged_df[["wa_no", "seq_id", "consensus_seq"]]
-    .copy()
-    .sort_values("seq_id")
-    # .dropna(axis=0, subset=["seq_id", "consensus_seq"])
-)
+def generate_fasta(merged_df: pd.DataFrame, logger: logging.Logger):
+    """Gather assemblies and output with new header lines"""
+    file_df = (
+        merged_df[["wa_no", "seq_id", "consensus_seq"]]
+        .copy()
+        .sort_values("seq_id")
+        # .dropna(axis=0, subset=["seq_id", "consensus_seq"])
+    )
 
-new_pattern = r".*/(?:call-consensus|cacheCopy)/(.*)"
-file_df["consensus_file"] = (
-    assembly_dir + os.sep + file_df["consensus_seq"].str.extract(new_pattern)
-)
+    seq_id_pattern = r".*/(?:call-consensus|cacheCopy)/(.*)"
+    file_df["consensus_file"] = (
+        ASSEMBLY_DIR
+        + os.sep
+        + file_df["consensus_seq"].fillna("").str.extract(seq_id_pattern)
+    )
+    fasta_generation_errs = dict()
 
+    def gather_seqs(row, out_buffer):
+        try:
+            with open(row["consensus_file"], "r") as seq_buffer:
+                rec = next(SeqIO.parse(seq_buffer, "fasta"))
+                rec.id = row["seq_id"]
+                rec.description = ""
+                SeqIO.write(rec, out_buffer, "fasta")
+        except (TypeError, AttributeError, FileNotFoundError) as err:
+            fasta_generation_errs[row["wa_no"]] = err
+            pass
 
-def gather_seqs(row, out_buffer):
-    # wa_no, seq_id, seq_path = row['wa_no'], row["seq_id"], row["consensus_file"]
-    try:
-        with open(row["consensus_file"], "r") as seq_buffer:
-            rec = next(SeqIO.parse(seq_buffer, "fasta"))
-            rec.id = row["seq_id"]
-            rec.description = ""
-            # print(rec.description)
-            SeqIO.write(rec, out_buffer, "fasta")
-    except (TypeError, FileNotFoundError) as err:
-        stderrs[row["wa_no"]] = err
-
-
-def stderr_handling():
-    failures = [
-        sample
-        for sample, msg in stderrs.items()
-        if ("Exception" in msg) or ("Error" in msg)
-    ]
-    if len(failures) > 0:
-        print(
-            "NOTE: the following sequences could not "
-            "be downloaded successfully and will be omitted "
-            "from the outputs:",
-            "\n".join(sample for sample in failures),
-            sep="\n",
+    all_seq_path = os.path.join(OUTDIR, "all_sequences.fa")
+    with open(all_seq_path, "w") as out_buffer:
+        _ = file_df.dropna(subset=["wa_no"]).apply(
+            gather_seqs, axis=1, out_buffer=out_buffer
         )
-    stderrs_msgs = " ".join(stderrs.values())
-    if "AccessDeniedException" in stderrs_msgs:
+    logger.info(f"Consolidated genome assemblies written to {all_seq_path}")
+    if len(fasta_generation_errs) > 0:
+        fasta_generation_msg = "\n".join(
+            [
+                (
+                    "There were problems with gathering/renaming the "
+                    "genome sequences for the following samples, and they "
+                    "were omitted from the outputs:"
+                ),
+                *fasta_generation_errs.keys(),
+            ]
+        )
+        logger.warning(fasta_generation_msg)
+    return fasta_generation_errs
+
+
+def handle_missing_data(df: pd.DataFrame, req_fields: list, logger: logging.Logger):
+    samples_missing_data = list()
+    working_df = df.copy().set_index("wa_no")[req_fields]  # .astype(str)
+    for req_field in req_fields:
+        missing_mask = working_df[req_field].replace("", None).isna()
+        samples_missing_data.extend(working_df[missing_mask].index.astype(str).tolist())
+    if len(samples_missing_data) > 0:
+        missing_data_msg = "\n".join(
+            [
+                (
+                    "The following samples are missing data in the required "
+                    f"fields {req_fields}:"
+                ),
+                *samples_missing_data,
+                ("and will be omitted from the outputs."),
+            ]
+        )
+        logger.warning(missing_data_msg)
+    return samples_missing_data
+
+
+def handle_missing_genomes(
+    df: pd.DataFrame, download_stderrs: dict, logger: logging.Logger
+):
+    """Detects errors that occur when downloading genomes, 
+    and prints/logs messages warning the user they will be 
+    omitted from the outputs."""
+
+    download_failures = list()
+    download_failure_msgs = list()
+
+    for sample, msg in download_stderrs.items():
+        if ("AccessDeniedException" in msg) or ("CommandException" in msg):
+            download_failures.append(sample)
+            download_failure_msgs.append(msg)
+
+    if len(download_failures) > 0:
+        download_failures_msg = "\n".join(
+            [
+                "NOTE: the following sequences could not "
+                "be downloaded successfully and will be omitted "
+                "from the outputs: ",
+                "\n".join(sample for sample in download_failures),
+            ]
+        )
+        logger.warning(download_failures_msg)
+    failure_msgs = " ".join(download_failure_msgs)
+    if "AccessDeniedException" in failure_msgs:
         access_msg = (
-            "NOTE: Cannot access the stored object(s); "
+            "Cannot access the stored object(s); "
             "please run 'gsutil config' before re-running "
             "script."
         )
-        print(access_msg)
-    elif ("CommandException" in stderrs_msgs) or ("Error" in stderrs_msgs):
+        logger.warning(access_msg)
+    elif ("CommandException" in failure_msgs) or ("Error" in failure_msgs):
         url_msg = (
             "Please check formatting of 'consensus_seq' "
             "column in input Terra tables for samples "
             "listed above."
         )
-        print(url_msg)
+        logger.warning(url_msg)
 
-    return failures
+    return download_failures
+
+
+def get_vocs():
+    if VOC_LIST:
+        _, voc_ext = os.path.splitext(VOC_LIST)
+        voc_df = EXTENSION_HANDLERS.get(voc_ext)(VOC_LIST)
+        voc_values = voc_df.T.values
+        vocs, vois = voc_values[0], voc_values[1]
+    else:
+        vocs, vois = [], []
+    return vocs, vois
+
+
+def handle_vocs(vocs: list, vois: list, terra_df: pd.DataFrame, logger: logging.Logger):
+    clades = terra_df[["wa_no", "nextclade_clade", "pangolin_lineage"]].dropna()
+    voc_samples = clades[
+        (clades["nextclade_clade"].isin(vocs)) | (clades["pangolin_lineage"].isin(vocs))
+    ]
+    voi_samples = clades[
+        (clades["nextclade_clade"].isin(vois)) | (clades["pangolin_lineage"].isin(vois))
+    ]
+
+    vocs_msg, vois_msg = None, None
+    for sample_df, label, list_, msg in zip(
+        (voc_samples, voi_samples), ("VOC", "VOI"), (vocs, vois), (vocs_msg, vois_msg)
+    ):
+        if sample_df.shape[0] > 0:
+            samples = sample_df["wa_no"].values.tolist()
+            msg = "\n".join(
+                [
+                    (
+                        "The following samples were found to be in the designated "
+                        f"{label} list ({list_}): "
+                    ),
+                    *samples,
+                    # str(sample_df.T.to_dict()),
+                    (
+                        "Please notify the Epidemiologist group at "
+                        "'wgs-epi@doh.wa.gov' prior to upload to GISAID"
+                    ),
+                ]
+            )
+            logger.info(msg)
+    return voc_samples, voi_samples
 
 
 def main():
+    """Run the functions of this script in order, to process data in 
+    preparation for uploading to GISAID"""
+    logger = setup_logger(OUTDIR)
+    dashboard_df = load_tables(DASHBOARD_TABLE)
+    terra_df = load_tables(TERRA_TABLE, terra_table=True)
+
+    for df, path in zip((dashboard_df, terra_df), (DASHBOARD_TABLE, TERRA_TABLE)):
+        if df.shape[0] < 1:
+            bad_input_message = (
+                "Could not interpret or could not find appropriate data "
+                f"in {path}; please check format of input file and try again."
+            )
+            logger.critical(bad_input_message)
+            sys.exit()
+
+    merged_df = merge_tables(terra_df, dashboard_df)
+    req_fields = ["collected_date"]
+    samples_missing_data = handle_missing_data(merged_df, req_fields, logger)
+    vocs, vois = get_vocs()
+    voc_samples, voi_samples = handle_vocs(vocs, vois, merged_df, logger)
+    if not NO_AUTO_QC:
+        bad_samples = auto_qc(merged_df, logger)
+    else:
+        bad_samples = []
+
     # Note: the assembly download execution step is the most
-    # Costly & time-intensive; comment out line below if they're already present
+    # Costly & time-intensive; comment out lines below if they're already present
     print(
         "Downloading consensus genome assemblies "
         "from the cloud; this may take some time..."
     )
-    tqdm.pandas()
-    _ = terra_df[["wa_no", "consensus_seq"]].progress_apply(gsutil_download, axis=1)
-    not_downloaded = stderr_handling()
-    new_df = merged_df[~merged_df["wa_no"].isin(not_downloaded)]
+    failed_samples = samples_missing_data + bad_samples
+    # tqdm.pandas()
+    download_stdouts, download_stderrs = download_assemblies(
+        merged_df[~merged_df["wa_no"].isin(failed_samples)]
+    )
+    missing_genomes = handle_missing_genomes(merged_df, download_stderrs, logger)
+    failed_samples.extend(missing_genomes)
+    fasta_generation_errs = generate_fasta(
+        merged_df[~merged_df["wa_no"].isin(failed_samples)], logger
+    )
+    failed_samples.extend(list(fasta_generation_errs.keys()))
+    new_df = merged_df[~merged_df["wa_no"].isin(failed_samples)]
     new_output_df = prep_metadata(new_df)
 
     outpath = os.path.join(OUTDIR, "gisaid_metadata.csv")
     new_out_df = new_output_df.droplevel(1, axis=1)
     new_out_df.set_index("submitter").to_csv(outpath)
-    print(f"GISAID metadata file written to {outpath}")
-
-    all_seq_path = os.path.join(OUTDIR, "all_sequences.fa")
-    with open(all_seq_path, "w") as out_buffer:
-        _ = file_df.apply(gather_seqs, axis=1, out_buffer=out_buffer)
-    print(f"Consolidated genome assemblies written to {all_seq_path}")
+    logger.info(f"GISAID metadata file written to {outpath}")
 
     print("Done")
 

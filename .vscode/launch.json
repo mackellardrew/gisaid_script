@@ -8,17 +8,32 @@
             "name": "Launch gisaid_tests",
             "python.pythonPath": "/home/dcm0303/python/envs/cloud/bin/python",
             "configurations": [
+                "genome_qc",
                 "print_help",
                 "basic_test",
+                "missing_data",
                 // "no_submitter",
                 "multiple_tables_search",
                 "multiple_tables_indir",
                 "specific_tables",
                 "bad_counties",
+                "bad_assembly_paths",
+                "with_vocs",
             ],
         }
     ],
     "configurations": [
+        {
+            "name": "genome_qc",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/genome_qc",
+            "args": [
+                "dmack_33",
+            ]
+        },
         {
             "name": "bad_counties",
             "type": "python",
@@ -36,6 +51,34 @@
             "request": "launch",
             "program": "${file}",
             "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_assemb_paths",
+            "args": [
+                "dmack_33",
+            ],
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "with_vocs",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/with_vocs",
+            "args": [
+                "dmack_33",
+                "-v",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/20210414_dummy_voc_list.xlsx",
+                "--indir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/with_vocs",
+            ],
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "missing_data",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/missing_data",
             "args": [
                 "dmack_33"
             ],
