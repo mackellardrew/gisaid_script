@@ -1,4 +1,4 @@
 {
-    "python.pythonPath": "/home/dcm0303/python/envs/cloud/bin/python",
+    "python.pythonPath": "/home/dcm0303/python/envs/terra_gisaid/bin/python",
     "python.terminal.activateEnvironment": true,
 }

@@ -14,8 +14,10 @@ import pandas as pd
 from Bio import SeqIO
 from functools import partial
 from glob import glob
+from IPython.display import display
 from logging.handlers import RotatingFileHandler
-from tqdm import tqdm
+
+# from tqdm import tqdm
 
 
 parser = argparse.ArgumentParser()
@@ -78,6 +80,14 @@ parser.add_argument(
     default=os.getcwd(),
 )
 parser.add_argument(
+    "-w",
+    "--workflow",
+    help=("Workflow used to generate Terra table: 'titan' or 'lang'"),
+    type=str,
+    dest="workflow",
+    default="titan",
+)
+parser.add_argument(
     "-g",
     "--gsutil",
     help=("Absolute path to gsutil tool, in case not in active PATH"),
@@ -123,14 +133,15 @@ OUTDIR = user_args.get("outdir")
 VOC_LIST = user_args.get("voc_list")
 GSUTIL_PATH = user_args.get("gsutil_path")
 NO_AUTO_QC = user_args.get("no_auto_qc")
+WORKFLOW = user_args.get("workflow").lower()
 
 ASSEMBLY_DIR = os.path.join(OUTDIR, "assemblies")
 EXTENSION_HANDLERS = {
     ".csv": pd.read_csv,
     ".tsv": partial(pd.read_csv, sep="\t"),
     ".txt": partial(pd.read_csv, sep="\t"),
-    ".xls": pd.read_excel,
-    ".xlsx": pd.read_excel,
+    ".xls": partial(pd.read_excel, engine="xlrd"),
+    ".xlsx": partial(pd.read_excel, engine="openpyxl"),
 }
 
 
@@ -173,10 +184,24 @@ def load_tables(table_list, terra_table=False):
     return df
 
 
-def merge_tables(terra_df: pd.DataFrame, dashboard_df: pd.DataFrame):
+def merge_tables(
+    terra_df: pd.DataFrame, dashboard_df: pd.DataFrame, logger: logging.Logger
+):
     """Merges the Dashboard and Terra tables, and reformats slightly"""
     pattern = ".*(WA[0-9]{7}).*"
     terra_df["wa_no"] = terra_df["sample_name"].str.extract(pattern)
+    missing_wa_nos = terra_df[terra_df["wa_no"].isna()]["sample_name"].tolist()
+    if len(missing_wa_nos) > 0:
+        missing_wa_nos_msg = "\n".join(
+            [
+                ("No WA number could be determined for the following " "samples: "),
+                *missing_wa_nos,
+                "and they will be omitted from the outputs",
+            ]
+        )
+        logger.warning(missing_wa_nos_msg)
+        print()
+    terra_df.dropna(subset=["wa_no"], inplace=True)
 
     dashboard_df.columns = [
         "_".join(col.lower().split()) for col in dashboard_df.columns
@@ -188,9 +213,39 @@ def merge_tables(terra_df: pd.DataFrame, dashboard_df: pd.DataFrame):
     return merged_df
 
 
+def get_column_map(workflow: str):
+    cols_needed = (
+        "sequence",
+        "coverage",
+        "ivar_version",
+        "nextclade_clade",
+        "pangolin_lineage",
+    )
+    titan_col_names = (
+        "assembly_fasta",
+        "percent_reference_coverage",
+        "ivar_version_consensus",
+        "nextclade_clade",
+        "pango_lineage",
+    )
+    lang_col_names = (
+        "consensus_seq",
+        "coverage_trim",
+        "ivar_version_consensus",
+        "nextclade_clade",
+        "pangolin_lineage",
+    )
+    workflow_cols = dict()
+    for key, col_names in zip(("titan", "lang"), (titan_col_names, lang_col_names)):
+        workflow_cols[key] = {
+            col_needed: col_name for col_needed, col_name in zip(cols_needed, col_names)
+        }
+    return workflow_cols[workflow]
+
+
 def auto_qc(merged_df: pd.DataFrame, logger: logging.Logger):
-    conditions = (merged_df["amp_fail"] > 40) | (merged_df["coverage_trim"] < 60)
-    key_metrics = ["amp_fail", "coverage_trim"]
+    conditions = merged_df[col_names.get("coverage")] < 60
+    key_metrics = [col_names.get("coverage")]
     bad_samples = merged_df[conditions]["wa_no"].dropna().tolist()
     if len(bad_samples) > 0:
         auto_qc_msg = "\n".join(
@@ -203,15 +258,14 @@ def auto_qc(merged_df: pd.DataFrame, logger: logging.Logger):
                 "and will be omitted from the outputs",
             ]
         )
-        print(auto_qc_msg)
         logger.warning(auto_qc_msg)
+        print()
     return bad_samples
 
 
 def download_assemblies(merged_df: pd.DataFrame):
     """For each sample represented in the Terra results, attempts to 
     download the corresponding genome assembly"""
-    from tqdm.auto import tqdm
 
     pathlib.Path(ASSEMBLY_DIR).mkdir(exist_ok=True)
     pipes = {key: subprocess.PIPE for key in ("stdout", "stderr")}
@@ -225,8 +279,7 @@ def download_assemblies(merged_df: pd.DataFrame):
         download_stdouts.update({wa_no: stdout.decode("utf-8")})
         download_stderrs.update({wa_no: stderr.decode("utf-8")})
 
-    # tqdm.pandas()
-    _ = merged_df[["wa_no", "consensus_seq"]].apply(gsutil_download, axis=1)
+    _ = merged_df[["wa_no", col_names.get("sequence")]].apply(gsutil_download, axis=1)
 
     return download_stdouts, download_stderrs
 
@@ -261,6 +314,15 @@ def handle_counties(county: str):
     return return_str
 
 
+def get_platform(sample_index: str) -> str:
+    instrument_type = "Illumina NextSeq"
+    miseqs = ["M4796", "M5130", "M5916"]
+    for miseq in miseqs:
+        if miseq in sample_index:
+            instrument_type = "Illumina MiSeq"
+    return instrument_type
+
+
 def prep_metadata(df: pd.DataFrame):
     """Configure output metadata spreadsheet"""
     new_fields = {
@@ -282,9 +344,11 @@ def prep_metadata(df: pd.DataFrame):
         ("covv_outbreak", "Outbreak"): None,
         ("covv_last_vaccinated", "Last vaccinated"): None,
         ("covv_treatment", "Treatment"): None,
-        ("covv_seq_technology", "Sequencing technology"): "Illumina MiSeq",
-        ("covv_assembly_method", "Assembly method"): df["ivar_version_consensus"],
-        ("covv_coverage", "Coverage"): df["depth_trim"],
+        ("covv_seq_technology", "Sequencing technology"): df["sample_name"].apply(
+            get_platform
+        ),
+        ("covv_assembly_method", "Assembly method"): df[col_names.get("ivar_version")],
+        ("covv_coverage", "Coverage"): None,
         (
             "covv_orig_lab",
             "Originating lab",
@@ -322,17 +386,16 @@ def prep_metadata(df: pd.DataFrame):
 def generate_fasta(merged_df: pd.DataFrame, logger: logging.Logger):
     """Gather assemblies and output with new header lines"""
     file_df = (
-        merged_df[["wa_no", "seq_id", "consensus_seq"]]
+        merged_df[["wa_no", "seq_id", col_names.get("sequence")]]
         .copy()
         .sort_values("seq_id")
-        # .dropna(axis=0, subset=["seq_id", "consensus_seq"])
     )
 
     seq_id_pattern = r".*/(?:call-consensus|cacheCopy)/(.*)"
     file_df["consensus_file"] = (
         ASSEMBLY_DIR
         + os.sep
-        + file_df["consensus_seq"].fillna("").str.extract(seq_id_pattern)
+        + file_df[col_names.get("sequence")].fillna("").str.extract(seq_id_pattern)
     )
     fasta_generation_errs = dict()
 
@@ -365,6 +428,7 @@ def generate_fasta(merged_df: pd.DataFrame, logger: logging.Logger):
             ]
         )
         logger.warning(fasta_generation_msg)
+        print()
     return fasta_generation_errs
 
 
@@ -386,6 +450,7 @@ def handle_missing_data(df: pd.DataFrame, req_fields: list, logger: logging.Logg
             ]
         )
         logger.warning(missing_data_msg)
+        print()
     return samples_missing_data
 
 
@@ -414,6 +479,7 @@ def handle_missing_genomes(
             ]
         )
         logger.warning(download_failures_msg)
+        print()
     failure_msgs = " ".join(download_failure_msgs)
     if "AccessDeniedException" in failure_msgs:
         access_msg = (
@@ -422,13 +488,15 @@ def handle_missing_genomes(
             "script."
         )
         logger.warning(access_msg)
+        print()
     elif ("CommandException" in failure_msgs) or ("Error" in failure_msgs):
         url_msg = (
-            "Please check formatting of 'consensus_seq' "
+            f"Please check formatting of '{col_names.get('sequence')}' "
             "column in input Terra tables for samples "
             "listed above."
         )
         logger.warning(url_msg)
+        print()
 
     return download_failures
 
@@ -445,12 +513,26 @@ def get_vocs():
 
 
 def handle_vocs(vocs: list, vois: list, terra_df: pd.DataFrame, logger: logging.Logger):
-    clades = terra_df[["wa_no", "nextclade_clade", "pangolin_lineage"]].dropna()
+    clades = (
+        terra_df[
+            [
+                "wa_no",
+                col_names.get("nextclade_clade"),
+                col_names.get("pangolin_lineage"),
+            ]
+        ]
+        .dropna()
+        .set_index("wa_no")[
+            [col_names.get("nextclade_clade"), col_names.get("pangolin_lineage")]
+        ]
+    )
     voc_samples = clades[
-        (clades["nextclade_clade"].isin(vocs)) | (clades["pangolin_lineage"].isin(vocs))
+        (clades[col_names.get("nextclade_clade")].isin(vocs))
+        | (clades[col_names.get("pangolin_lineage")].isin(vocs))
     ]
     voi_samples = clades[
-        (clades["nextclade_clade"].isin(vois)) | (clades["pangolin_lineage"].isin(vois))
+        (clades[col_names.get("nextclade_clade")].isin(vois))
+        | (clades[col_names.get("pangolin_lineage")].isin(vois))
     ]
 
     vocs_msg, vois_msg = None, None
@@ -458,7 +540,7 @@ def handle_vocs(vocs: list, vois: list, terra_df: pd.DataFrame, logger: logging.
         (voc_samples, voi_samples), ("VOC", "VOI"), (vocs, vois), (vocs_msg, vois_msg)
     ):
         if sample_df.shape[0] > 0:
-            samples = sample_df["wa_no"].values.tolist()
+            samples = sample_df.index.values.tolist()
             msg = "\n".join(
                 [
                     (
@@ -466,7 +548,6 @@ def handle_vocs(vocs: list, vois: list, terra_df: pd.DataFrame, logger: logging.
                         f"{label} list ({list_}): "
                     ),
                     *samples,
-                    # str(sample_df.T.to_dict()),
                     (
                         "Please notify the Epidemiologist group at "
                         "'wgs-epi@doh.wa.gov' prior to upload to GISAID"
@@ -474,15 +555,34 @@ def handle_vocs(vocs: list, vois: list, terra_df: pd.DataFrame, logger: logging.
                 ]
             )
             logger.info(msg)
+            print()
+    # Kind of janky solution to show which sample is which lineage:
+    # display in terminal, then write to separate TSV file
+    vocs_vois_df = pd.concat([voc_samples, voi_samples])
+    if vocs_vois_df.shape[0] > 0:
+        outpath = os.path.join(OUTDIR, "vocs_vois_table.tsv")
+        vocs_vois_df.to_csv(outpath, sep="\t")
+        vocs_vois_out_msg = (
+            "The following table of samples "
+            "and Pango Linage/NextClade Clade "
+            f"was written to {outpath}."
+        )
+        logger.info(vocs_vois_out_msg)
+        display(vocs_vois_df)
+        print()
+
     return voc_samples, voi_samples
 
 
 def main():
     """Run the functions of this script in order, to process data in 
     preparation for uploading to GISAID"""
+    print()
     logger = setup_logger(OUTDIR)
     dashboard_df = load_tables(DASHBOARD_TABLE)
     terra_df = load_tables(TERRA_TABLE, terra_table=True)
+    global col_names
+    col_names = get_column_map(WORKFLOW)
 
     for df, path in zip((dashboard_df, terra_df), (DASHBOARD_TABLE, TERRA_TABLE)):
         if df.shape[0] < 1:
@@ -493,11 +593,11 @@ def main():
             logger.critical(bad_input_message)
             sys.exit()
 
-    merged_df = merge_tables(terra_df, dashboard_df)
+    merged_df = merge_tables(terra_df, dashboard_df, logger=logger)
     req_fields = ["collected_date"]
     samples_missing_data = handle_missing_data(merged_df, req_fields, logger)
     vocs, vois = get_vocs()
-    voc_samples, voi_samples = handle_vocs(vocs, vois, merged_df, logger)
+    _, _ = handle_vocs(vocs, vois, merged_df, logger)
     if not NO_AUTO_QC:
         bad_samples = auto_qc(merged_df, logger)
     else:
@@ -507,11 +607,12 @@ def main():
     # Costly & time-intensive; comment out lines below if they're already present
     print(
         "Downloading consensus genome assemblies "
-        "from the cloud; this may take some time..."
+        "from the cloud; this may take some time...",
+        end="\n",
     )
     failed_samples = samples_missing_data + bad_samples
-    # tqdm.pandas()
-    download_stdouts, download_stderrs = download_assemblies(
+
+    _, download_stderrs = download_assemblies(
         merged_df[~merged_df["wa_no"].isin(failed_samples)]
     )
     missing_genomes = handle_missing_genomes(merged_df, download_stderrs, logger)
@@ -520,15 +621,17 @@ def main():
         merged_df[~merged_df["wa_no"].isin(failed_samples)], logger
     )
     failed_samples.extend(list(fasta_generation_errs.keys()))
-    new_df = merged_df[~merged_df["wa_no"].isin(failed_samples)]
-    new_output_df = prep_metadata(new_df)
+    new_df = (
+        prep_metadata(merged_df[~merged_df["wa_no"].isin(failed_samples)])
+        .droplevel(1, axis=1)
+        .set_index("submitter")
+    )
 
     outpath = os.path.join(OUTDIR, "gisaid_metadata.csv")
-    new_out_df = new_output_df.droplevel(1, axis=1)
-    new_out_df.set_index("submitter").to_csv(outpath)
+    new_df.to_csv(outpath)
     logger.info(f"GISAID metadata file written to {outpath}")
 
-    print("Done")
+    print("Done", end="\n\n")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,8 @@
             "configurations": [
                 "genome_qc",
                 "print_help",
-                "basic_test",
+                "basic_test_lang",
+                "basic_test_titan",
                 "missing_data",
                 // "no_submitter",
                 "multiple_tables_search",
@@ -96,11 +97,35 @@
             "console": "integratedTerminal",
         },
         {
-            "name": "basic_test",
+            "name": "basic_test_lang",
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test_lang",
+            "args": [
+                "dmack_33",
+                "--workflow",
+                "lang"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "basic_test_titan",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test_titan",
+            "args": [
+                "dmack_33",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "basic_test_titan_large",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test_titan_large",
             "args": [
                 "dmack_33",
             ],
