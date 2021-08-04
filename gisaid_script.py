@@ -513,6 +513,8 @@ def get_vocs():
 
 
 def handle_vocs(vocs: list, vois: list, terra_df: pd.DataFrame, logger: logging.Logger):
+    if len(vocs) == 0 and len(vois) == 0:
+        return [], []
     clades = (
         terra_df[
             [
