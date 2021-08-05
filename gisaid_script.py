@@ -267,7 +267,7 @@ def download_assemblies(merged_df: pd.DataFrame):
     """For each sample represented in the Terra results, attempts to 
     download the corresponding genome assembly"""
 
-    pathlib.Path(ASSEMBLY_DIR).mkdir(exist_ok=True)
+    pathlib.Path(ASSEMBLY_DIR).mkdir(exist_ok=True, parents=True)
     pipes = {key: subprocess.PIPE for key in ("stdout", "stderr")}
     download_stdouts, download_stderrs = dict(), dict()
 
@@ -296,19 +296,11 @@ def handle_counties(county: str):
         "snohomish; spokane; stevens; thurston; wahkiakum; walla walla; "
         "whatcom; whitman; yakima"
     ).split("; ")
-    valid_wa_counties = {
-        county: (
-            " ".join(word.capitalize())
-            if len(county.split()) > 1
-            else county.capitalize()
-        )
-        for word in county.split()
-        for county in wa_counties_lower
-    }
     no_county = "North America / USA / Washington"
-
-    if county.lower() in valid_wa_counties:
-        return_str = f"{no_county} / {valid_wa_counties[county.lower()]} County"
+    if county.lower() in wa_counties_lower:
+        words = [word.capitalize() for word in county.split()]
+        new_county = (" ".join(words) if len(words) > 1 else words[0])
+        return_str = f"{no_county} / {new_county} County"
     else:
         return_str = no_county
     return return_str

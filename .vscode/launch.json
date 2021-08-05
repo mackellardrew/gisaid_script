@@ -213,6 +213,24 @@
                 "--gsutil",
                 "/home/dcm0303/miniconda3/envs/cloud/bin/gsutil",
             ]
+        },
+        {
+            "name": "bad_counties_test_two",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties",
+            "args": [
+                "dmack_33",
+                "--terra",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV046-VH00442-210731.tsv",
+                "--dashboard",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20210804_dashboard_dump.xlsx",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties_2",
+                "--gsutil",
+                "/home/dcm0303/miniconda3/envs/cloud/bin/gsutil",
+            ]
         }
     ],
 }
