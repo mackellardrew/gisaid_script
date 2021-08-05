@@ -588,6 +588,10 @@ def main():
             sys.exit()
 
     merged_df = merge_tables(terra_df, dashboard_df, logger=logger)
+    merged_df_path = os.path.join(OUTDIR, 'merged_df.tsv')
+    merged_df.to_csv(merged_df_path, sep='\t')
+    sys.exit()
+    
     req_fields = ["collected_date"]
     samples_missing_data = handle_missing_data(merged_df, req_fields, logger)
     vocs, vois = get_vocs()
