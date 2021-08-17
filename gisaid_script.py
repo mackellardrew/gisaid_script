@@ -208,7 +208,7 @@ def merge_tables(
     ]
 
     merged_df = pd.merge(
-        terra_df, dashboard_df, left_on="wa_no", right_on="folderno", how="left"
+        terra_df, dashboard_df, left_on="wa_no", right_on="specimenid", how="left"
     )
     return merged_df
 
@@ -587,6 +587,8 @@ def main():
             logger.critical(bad_input_message)
             sys.exit()
 
+# DCM 20210805 note: the following block is just to get
+# a local copy of the `merged_df` table to look at
     merged_df = merge_tables(terra_df, dashboard_df, logger=logger)
     merged_df_path = os.path.join(OUTDIR, 'merged_df.tsv')
     merged_df.to_csv(merged_df_path, sep='\t')
