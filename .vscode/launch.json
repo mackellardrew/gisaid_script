@@ -32,6 +32,21 @@
     ],
     "configurations": [
         {
+            "name": "folderno_specimenID_test",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/folderno_specimenID_test",
+            "args": [
+                "dmack_33",
+                "-d",
+                "/mnt/c/Users/DCM0303/Downloads/CoV047-VH00453-210813.tsv",
+                "-t",
+                "/mnt/c/Users/DCM0303/Downloads/CoV047-VH00453-210813.tsv",
+            ]
+        },
+        {
             "name": "genome_qc",
             "type": "python",
             "request": "launch",
