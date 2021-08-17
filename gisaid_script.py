@@ -208,7 +208,7 @@ def merge_tables(
     ]
 
     merged_df = pd.merge(
-        terra_df, dashboard_df, left_on="wa_no", right_on="folderno", how="left"
+        terra_df, dashboard_df, left_on="wa_no", right_on="specimenid", how="left"
     )
     return merged_df
 
