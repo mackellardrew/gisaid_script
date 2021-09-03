@@ -1,7 +1,6 @@
 #! /usr/bin/python
 
 import argparse
-import datetime
 import logging
 import os
 import pathlib
@@ -14,6 +13,7 @@ import pandas as pd
 from Bio import SeqIO
 from functools import partial
 from glob import glob
+from datetime import datetime
 from IPython.display import display
 from logging.handlers import RotatingFileHandler
 
@@ -143,6 +143,7 @@ EXTENSION_HANDLERS = {
     ".xls": partial(pd.read_excel, engine="xlrd"),
     ".xlsx": partial(pd.read_excel, engine="openpyxl"),
 }
+TODAY = datetime.now().strftime("%Y-%m-%d")
 
 
 def setup_logger(output_dir):
@@ -210,6 +211,9 @@ def merge_tables(
     merged_df = pd.merge(
         terra_df, dashboard_df, left_on="wa_no", right_on="specimenid", how="left"
     )
+    # "sample_id" field required by PHA4GE standard, later
+    merged_df['sample_id'] = merged_df['seq_id'].fillna('').str.split('/', expand=True).iloc[:, 2]
+
     return merged_df
 
 
@@ -313,6 +317,71 @@ def get_platform(sample_index: str) -> str:
         if miseq in sample_index:
             instrument_type = "Illumina MiSeq"
     return instrument_type
+
+
+def handle_reasons(reason: str) -> str:
+    """Convert WAPHL categories of reasons for sequencing to those that fit PHA4GE standard"""
+    reasons_map = {
+        "PHL Diagnostic": "Baseline surveillance (random sampling)",
+        "Suspected vaccine breakthrough": "Vaccine escape surveillance",
+        "Suspected reinfection": "Re-infection surveillance",
+        "Outbreak Investigation": "Cluster/Outbreak investigation",
+        "Travel associated": "Travel-associated surveillance",
+        "Other": "Not Provided",
+        "S-dropout": "Screening for Variants of Concern (VOC)",
+    }
+    pha4ge_reason = reasons_map.get(reason)
+    return pha4ge_reason
+
+
+def get_pha4ge_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Generates the proper field names & formats for metadata
+    compatible with the PHA4GE standard."""
+    pha4ge_map = {
+        'specimen_collector_sample_id': df["sample_id"],
+        'bioproject_umbrella_accession': "PRJNA615625",
+        'bioproject_accession': "PRJNA749781",
+        'biosample_accession': None,
+        'genbank_ena_ddbj_accession': None,
+        'gisaid_accession': None,
+        'gisaid_virus_name': df["seq_id"],
+        'sample_collected_by': df["submittinglab"],
+        'sequence_submitted_by': "Washington State Department of Health Public Health Laboratories",
+        'sequence_submitter_contact_address': "1610 NE 150th St., Shoreline, WA 98155",
+        'sample_collection_date': df["collected_date"],
+        'geo_loc_name_country': "USA",
+        'geo_loc_name_state_province_territory': "Washington",
+        'geo_loc_name_county_region': df["county"].fillna("").apply(handle_counties),
+        'organism': "Severe acute respiratory syndrome coronavirus 2",
+        'isolate': df[["sample_id", "collected_date"]].apply(
+            lambda x: f"SARS-CoV-2/Homo sapiens/USA/{x[0]}/{x[1]}",
+            axis=1
+        ),
+        'host_scientific_name': "Homo sapiens",
+        'host_disease': "COVID-19",
+        'purpose_of_sequencing': df["reason"].apply(handle_reasons),
+        'sequencing_instrument': df["sample_name"].apply(get_platform),
+        'sequencing_protocol_name': "Illumina COVIDSeq",
+        'raw_sequence_data_processing_method': "FASTQC, Trimmomatic: quality and adapter trimming",
+        'dehosting_method': "NCBI SRA human scrubber",
+        'consensus_sequence_software_name': "iVar",
+        'consensus_sequence_software_version': (
+            df["ivar_version_consensus"].fillna(" . . Unknown").str.split(expand=True).iloc[:, -1]
+        ),
+        'breadth_of_coverage_value': df["percent_reference_coverage"].fillna("0").apply(lambda x: f"{int(x)}%"),
+        'depth_of_coverage_value': df["assembly_mean_coverage"].fillna("0").apply(lambda x: f"{int(x)}x"),
+        'bioinformatics_protocol': (
+            "https://github.com/theiagen/public_health_viral_genomics/blob/main/workflows/wf_titan_illumina_pe.wdl"
+        ),
+    }
+
+    pha4ge_df = pd.DataFrame(pha4ge_map)
+
+    pha4ge_df.dropna(
+        axis=0, subset=['specimen_collector_sample_id'], inplace=True
+    )
+
+    return pha4ge_df
 
 
 def prep_metadata(df: pd.DataFrame):
@@ -592,7 +661,7 @@ def main():
     merged_df = merge_tables(terra_df, dashboard_df, logger=logger)
     merged_df_path = os.path.join(OUTDIR, 'merged_df.tsv')
     merged_df.to_csv(merged_df_path, sep='\t')
-    sys.exit()
+    # sys.exit()
     
     req_fields = ["collected_date"]
     samples_missing_data = handle_missing_data(merged_df, req_fields, logger)
@@ -605,31 +674,34 @@ def main():
 
     # Note: the assembly download execution step is the most
     # Costly & time-intensive; comment out lines below if they're already present
-    print(
-        "Downloading consensus genome assemblies "
-        "from the cloud; this may take some time...",
-        end="\n",
-    )
+    # print(
+    #     "Downloading consensus genome assemblies "
+    #     "from the cloud; this may take some time...",
+    #     end="\n",
+    # )
     failed_samples = samples_missing_data + bad_samples
 
-    _, download_stderrs = download_assemblies(
-        merged_df[~merged_df["wa_no"].isin(failed_samples)]
-    )
-    missing_genomes = handle_missing_genomes(merged_df, download_stderrs, logger)
-    failed_samples.extend(missing_genomes)
+    # _, download_stderrs = download_assemblies(
+    #     merged_df[~merged_df["wa_no"].isin(failed_samples)]
+    # )
+    # missing_genomes = handle_missing_genomes(merged_df, download_stderrs, logger)
+    # failed_samples.extend(missing_genomes)
     fasta_generation_errs = generate_fasta(
         merged_df[~merged_df["wa_no"].isin(failed_samples)], logger
     )
     failed_samples.extend(list(fasta_generation_errs.keys()))
-    new_df = (
-        prep_metadata(merged_df[~merged_df["wa_no"].isin(failed_samples)])
-        .droplevel(1, axis=1)
-        .set_index("submitter")
+    pha4ge_df = get_pha4ge_df(
+        merged_df[~merged_df["wa_no"].isin(failed_samples)]
     )
+    # new_df = (
+    #     prep_metadata(merged_df[~merged_df["wa_no"].isin(failed_samples)])
+    #     .droplevel(1, axis=1)
+    #     .set_index("submitter")
+    # )
 
-    outpath = os.path.join(OUTDIR, "gisaid_metadata.csv")
-    new_df.to_csv(outpath)
-    logger.info(f"GISAID metadata file written to {outpath}")
+    pha4ge_outpath = os.path.join(OUTDIR, "pha4ge_metadata.csv")
+    pha4ge_df.to_csv(pha4ge_outpath)
+    logger.info(f"PHA4GE metadata file written to {pha4ge_outpath}")
 
     print("Done", end="\n\n")
 
