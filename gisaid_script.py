@@ -355,6 +355,7 @@ def prep_metadata(df: pd.DataFrame):
         ("covv_subm_sample_id", "Sample ID given by the submitting laboratory"): None,
         ("covv_authors", "Authors",): (
             "Drew MacKellar, Philip Dykema, Denny Russell, "
+            "Lisa Jones, Holly Halstead, "
             "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
             "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
             "Avi Singh, Rebecca Cao"
