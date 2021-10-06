@@ -102,6 +102,15 @@ parser.add_argument(
     dest="no_auto_qc",
     default=False,
 )
+parser.add_argument(
+    "--author_list",
+    help=(
+        "Absolute path to file containing a list of Authors to be attributed "
+        "in repositories.  Names should be on a single line, separated by semicolons."
+    ),
+    type=str,
+    dest="author_list",
+)
 
 user_args = vars(parser.parse_args())
 INDIR = user_args.get("indir")
@@ -144,6 +153,19 @@ EXTENSION_HANDLERS = {
     ".xlsx": partial(pd.read_excel, engine="openpyxl"),
 }
 TODAY = datetime.now().strftime("%Y-%m-%d")
+DEFAULT_AUTHORS = (
+            "Drew MacKellar, Philip Dykema, Denny Russell, "
+            "Lisa Jones, Holly Halstead, "
+            "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
+            "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
+            "Avi Singh, Rebecca Cao"
+) 
+AUTHORS_PATH = user_args.get('author_list')
+if AUTHORS_PATH:
+    with open(AUTHORS_PATH, 'r') as f:
+        AUTHORS = [name.strip() for name in f.readline().split(';')]
+else:
+    AUTHORS = DEFAULT_AUTHORS
 
 
 def setup_logger(output_dir):
@@ -334,7 +356,7 @@ def handle_reasons(reason: str) -> str:
     return pha4ge_reason
 
 
-def get_pha4ge_df(df: pd.DataFrame) -> pd.DataFrame:
+def get_pha4ge_metadata(df: pd.DataFrame) -> pd.DataFrame:
     """Generates the proper field names & formats for metadata
     compatible with the PHA4GE standard."""
     pha4ge_map = {
@@ -384,20 +406,21 @@ def get_pha4ge_df(df: pd.DataFrame) -> pd.DataFrame:
     return pha4ge_df
 
 
-def prep_metadata(df: pd.DataFrame):
-    """Configure output metadata spreadsheet"""
-    new_fields = {
+def get_gisaid_metadata(df: pd.DataFrame) -> pd.DataFrame:
+    """Configure output metadata spreadsheet for upload to GISAID repository 
+    from input PHA4GE standard"""
+    gisaid_fields = {
         ("submitter", "Submitter"): SUBMITTER,
         ("fn", "FASTA filename"): "all_sequences.fasta",
-        ("covv_virus_name", "Virus name"): df["seq_id"],
+        ("covv_virus_name", "Virus name"): df["gisaid_virus_name"],
         ("covv_type", "Type"): "betacoronavirus",
         ("covv_passage", "Passage details/history"): "Original",
-        ("covv_collection_date", "Collection date"): df["collected_date"],
-        ("covv_location", "Location"): df["county"].fillna("").apply(handle_counties),
+        ("covv_collection_date", "Collection date"): df["sample_collection_date"],
+        ("covv_location", "Location"): df["geo_loc_name_county_region"],
         ("covv_add_location", "Additional location information"): None,
         ("covv_host", "Host"): "Human",
         ("covv_add_host_info", "Additional host information"): None,
-        ("covv_sampling_strategy", "Sampling Strategy"): None,
+        ("covv_sampling_strategy", "Sampling Strategy"): df['purpose_of_sequencing'],
         ("covv_gender", "Gender"): "unknown",
         ("covv_patient_age", "Patient age"): "unknown",
         ("covv_patient_status", "Patient status"): "unknown",
@@ -405,11 +428,11 @@ def prep_metadata(df: pd.DataFrame):
         ("covv_outbreak", "Outbreak"): None,
         ("covv_last_vaccinated", "Last vaccinated"): None,
         ("covv_treatment", "Treatment"): None,
-        ("covv_seq_technology", "Sequencing technology"): df["sample_name"].apply(
-            get_platform
+        ("covv_seq_technology", "Sequencing technology"): df["sequencing_instrument"],
+        ("covv_assembly_method", "Assembly method"): (
+            df['consensus_sequence_software_version'].apply(lambda x: f"iVar v{x}")
         ),
-        ("covv_assembly_method", "Assembly method"): df[col_names.get("ivar_version")],
-        ("covv_coverage", "Coverage"): None,
+        ("covv_coverage", "Coverage"): df['depth_of_coverage_value'],
         (
             "covv_orig_lab",
             "Originating lab",
@@ -424,6 +447,7 @@ def prep_metadata(df: pd.DataFrame):
         ("covv_subm_sample_id", "Sample ID given by the submitting laboratory"): None,
         ("covv_authors", "Authors",): (
             "Drew MacKellar, Philip Dykema, Denny Russell, "
+            "Lisa Jones, Holly Halstead, "
             "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
             "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
             "Avi Singh, Rebecca Cao"
@@ -432,16 +456,34 @@ def prep_metadata(df: pd.DataFrame):
         ("comment_type", "Comment Icon"): None,
     }
 
-    new_output_df = (
-        pd.DataFrame(new_fields)
+    gisaid_metadata_df = (
+        pd.DataFrame(gisaid_fields)
         .sort_values(("covv_virus_name", "Virus name"))
         .reset_index(drop=True)
     )
-    new_output_df.dropna(
-        axis=0, subset=[("covv_virus_name", "Virus name")], inplace=True
-    )
+    # new_output_df.dropna(
+    #     axis=0, subset=[("covv_virus_name", "Virus name")], inplace=True
+    # )
 
-    return new_output_df
+    return gisaid_metadata_df
+
+
+def get_biosample_metadata(merged_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
+    biosample_fields = {
+
+    }
+    biosample_metadata_df = pd.DataFrame(biosample_fields)
+    return biosample_metadata_df
+
+def get_genbank_metadata(merged_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
+    """Configure output metadata spreadsheet for upload to GenBank repository 
+    from input PHA4GE standard"""
+    genbank_fields = {
+
+    }
+    genbank_metadata_df = pd.DataFrame(genbank_fields)
+    return genbank_metadata_df
+
 
 
 def generate_fasta(merged_df: pd.DataFrame, logger: logging.Logger):
@@ -690,18 +732,27 @@ def main():
         merged_df[~merged_df["wa_no"].isin(failed_samples)], logger
     )
     failed_samples.extend(list(fasta_generation_errs.keys()))
-    pha4ge_df = get_pha4ge_df(
+    pha4ge_metadata_df = get_pha4ge_metadata(
         merged_df[~merged_df["wa_no"].isin(failed_samples)]
+    ).set_index('specimen_collector_sample_id', drop=True)
+    gisaid_metadata_df = (
+        prep_metadata(merged_df[~merged_df["wa_no"].isin(failed_samples)])
+        .droplevel(1, axis=1)
+        .set_index("submitter")
     )
-    # new_df = (
-    #     prep_metadata(merged_df[~merged_df["wa_no"].isin(failed_samples)])
-    #     .droplevel(1, axis=1)
-    #     .set_index("submitter")
-    # )
 
     pha4ge_outpath = os.path.join(OUTDIR, "pha4ge_metadata.csv")
-    pha4ge_df.to_csv(pha4ge_outpath)
-    logger.info(f"PHA4GE metadata file written to {pha4ge_outpath}")
+    pha4ge_outpath, gisaid_outpath, genbank_outpath = (
+        os.path.join(OUTDIR, filename) for filename in 
+        ('pha4ge_metadata.csv', 'gisaid_metadata.csv', 'genbank_metadata.csv')
+    )
+    for metadata_df, metadata_table_name, outpath in zip(
+        (pha4ge_metadata_df, gisaid_metadata_df, genbank_metadata_df),
+        ("PHA4GE", "GISAID", "GenBank")
+        (pha4ge_outpath, gisaid_outpath, genbank_outpath)
+    ):
+        metadata_df.to_csv(outpath)
+        logger.info(f"{metadata_table_name} metadata file written to {outpath}")
 
     print("Done", end="\n\n")
 
