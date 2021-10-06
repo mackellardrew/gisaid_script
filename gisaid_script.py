@@ -111,6 +111,15 @@ parser.add_argument(
     type=str,
     dest="author_list",
 )
+parser.add_argument(
+    "--author_list",
+    help=(
+        "Absolute path to file containing a list of Authors to be attributed "
+        "in repositories.  Names should be on a single line, separated by semicolons."
+    ),
+    type=str,
+    dest="author_list",
+)
 
 user_args = vars(parser.parse_args())
 INDIR = user_args.get("indir")
