@@ -255,7 +255,7 @@
                 "--gsutil",
                 "/home/dcm0303/miniconda3/envs/cloud/bin/gsutil",
             ]
-        }
+        },
         {
             "name": "pha4ge_metadata_test_1",
             "type": "python",
