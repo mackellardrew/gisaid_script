@@ -29,6 +29,13 @@
                 "bad_counties_test_20210804",
             ],
         },
+        {
+            "name": "pha4ge_metadata_test",
+            "python.pythonPath": "/home/dcm0303/miniconda3/envs/cloud",
+            "configurations": [
+
+            ],
+        },
     ],
     "configurations": [
         {
@@ -249,5 +256,23 @@
                 "/home/dcm0303/miniconda3/envs/cloud/bin/gsutil",
             ]
         }
+        {
+            "name": "pha4ge_metadata_test_1",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/pha4ge_metadata_test_1",
+            "args": [
+                "dmack_33",
+                "--terra",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV046-VH00442-210731.tsv",
+                "--dashboard",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20211011_dashboard_dump.xlsx",
+                // "--outdir",
+                // "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties_2",
+                "--gsutil",
+                "/home/dcm0303/miniconda3/envs/cloud/bin/gsutil",
+            ],
+        },
     ],
 }
