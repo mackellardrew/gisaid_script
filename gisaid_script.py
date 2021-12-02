@@ -356,7 +356,7 @@ def handle_reasons(reason: str) -> str:
     return pha4ge_reason
 
 
-def get_pha4ge_metadata(df: pd.DataFrame) -> pd.DataFrame:
+def get_pha4ge_metadata(df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
     """Generates the proper field names & formats for metadata
     compatible with the PHA4GE standard."""
     pha4ge_map = {
@@ -406,7 +406,7 @@ def get_pha4ge_metadata(df: pd.DataFrame) -> pd.DataFrame:
     return pha4ge_df
 
 
-def get_gisaid_metadata(df: pd.DataFrame) -> pd.DataFrame:
+def get_gisaid_metadata(df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
     """Configure output metadata spreadsheet for upload to GISAID repository 
     from input PHA4GE standard"""
     gisaid_fields = {
@@ -468,12 +468,46 @@ def get_gisaid_metadata(df: pd.DataFrame) -> pd.DataFrame:
     return gisaid_metadata_df
 
 
-def get_biosample_metadata(merged_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
-    biosample_fields = {
+def format_collection_date(date_col: pd.Series) -> pd.Series:
+    """Reformat collection dates from MM/DD/YYYY in LIMS Dashboard output to 
+    YYYY-MM-DD format required by NCBI."""
+    formatted_date_col = pd.to_datetime(date_col, format='%Y-%m-%d')
+    return formatted_date_col
 
+
+def get_biosample_metadata(pha4ge_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
+    """Configure output metadata spreadsheet for upload to NCBI BioSample 
+    database from input PHA4GE standard"""
+    biosample_fields = {
+        'sample_name': pha4ge_df['specimen_collector_sample_id'],
+        'bioproject_accession': pha4ge_df['bioproject_accession'],
+        # 'umbrella_bioproject_accession': pha4ge_df['bioproject_umbrella_accession'],
+        'organism': pha4ge_df['organism'],
+        'collected_by': pha4ge_df['sample_collected_by'],
+        'collection_date': format_collection_date(pha4ge_df['sample_collection_date']),
+        'geo_loc_name': (
+            pha4ge_df['geo_loc_name_county_region'].str.split(' / ', expand=True)[1:]
+            .agg(': ',join, axis=1)
+        ),
+        'host': pha4ge_df['host_scientific_name'],
+        'host_disease': pha4ge_df['host_disease'],
+        'isolate': pha4ge_df['specimen_collector_sample_id'].apply(
+            lambda x: f"SARS-CoV-2/Human/USA/{X}/{TODAY[:4]}"
+        ),
+        'isolation_source': 'Clinical/Nasal Swab',
+        'gisaid_accession': pha4ge_df['gisaid_accession'],
+        'gisaid_virus_name': pha4ge_df['gisaid_virus_name'],
+        'purpose_of_sequencing': pha4ge_df['purpose_of_sequencing'],
+        'sequenced_by': pha4ge_df['sequence_submitted_by'],
     }
     biosample_metadata_df = pd.DataFrame(biosample_fields)
+    biosample_metadata_df.rename(columns={
+        'umbrella_bioproject_accession': 'bioproject_accession',
+    },
+    inplace=True
+    )
     return biosample_metadata_df
+
 
 def get_genbank_metadata(merged_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
     """Configure output metadata spreadsheet for upload to GenBank repository 
@@ -486,10 +520,10 @@ def get_genbank_metadata(merged_df: pd.DataFrame, logger: logging.Logger) -> pd.
 
 
 
-def generate_fasta(merged_df: pd.DataFrame, logger: logging.Logger):
+def generate_fasta(df: pd.DataFrame, logger: logging.Logger):
     """Gather assemblies and output with new header lines"""
     file_df = (
-        merged_df[["wa_no", "seq_id", col_names.get("sequence")]]
+        df[["wa_no", "seq_id", col_names.get("sequence")]]
         .copy()
         .sort_values("seq_id")
     )
@@ -716,11 +750,11 @@ def main():
 
     # Note: the assembly download execution step is the most
     # Costly & time-intensive; comment out lines below if they're already present
-    # print(
-    #     "Downloading consensus genome assemblies "
-    #     "from the cloud; this may take some time...",
-    #     end="\n",
-    # )
+    print(
+        "Downloading consensus genome assemblies "
+        "from the cloud; this may take some time...",
+        end="\n",
+    )
     failed_samples = samples_missing_data + bad_samples
 
     # _, download_stderrs = download_assemblies(
@@ -733,13 +767,25 @@ def main():
     )
     failed_samples.extend(list(fasta_generation_errs.keys()))
     pha4ge_metadata_df = get_pha4ge_metadata(
-        merged_df[~merged_df["wa_no"].isin(failed_samples)]
+        merged_df[~merged_df["wa_no"].isin(failed_samples)],
+        logger
     ).set_index('specimen_collector_sample_id', drop=True)
-    gisaid_metadata_df = (
-        prep_metadata(merged_df[~merged_df["wa_no"].isin(failed_samples)])
-        .droplevel(1, axis=1)
-        .set_index("submitter")
-    )
+    # gisaid_metadata_df = (
+    #     get_gisaid_metadata(pha4ge_metadata_df, logger)
+    #     .droplevel(1, axis=1)
+    #     .set_index("submitter")
+    # )
+    # # Next step is to generate genbank_metadata_df
+    # genbank_metadata_df = (
+    #     get_genbank_metadata(pha4ge_metadata_df, logger)
+    #     .droplevel(1, axis=1)
+    #     .set_index('submitter')
+    # )
+
+    # quick test; delete later
+    blank_df = pd.DataFrame({})
+    gisaid_metadata_df, genbank_metadata_df = blank_df.copy(), blank_df.copy()
+    # end suspect block
 
     pha4ge_outpath = os.path.join(OUTDIR, "pha4ge_metadata.csv")
     pha4ge_outpath, gisaid_outpath, genbank_outpath = (
@@ -748,7 +794,7 @@ def main():
     )
     for metadata_df, metadata_table_name, outpath in zip(
         (pha4ge_metadata_df, gisaid_metadata_df, genbank_metadata_df),
-        ("PHA4GE", "GISAID", "GenBank")
+        ("PHA4GE", "GISAID", "GenBank"),
         (pha4ge_outpath, gisaid_outpath, genbank_outpath)
     ):
         metadata_df.to_csv(outpath)
