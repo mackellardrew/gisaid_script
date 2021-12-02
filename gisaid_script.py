@@ -397,30 +397,30 @@ def get_pha4ge_metadata(df: pd.DataFrame, logger: logging.Logger) -> pd.DataFram
         ),
     }
 
-    pha4ge_df = pd.DataFrame(pha4ge_map)
+    pha4ge_metadata_df = pd.DataFrame(pha4ge_map)
 
-    pha4ge_df.dropna(
+    pha4ge_metadata_df.dropna(
         axis=0, subset=['specimen_collector_sample_id'], inplace=True
     )
 
-    return pha4ge_df
+    return pha4ge_metadata_df
 
 
-def get_gisaid_metadata(df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
+def get_gisaid_metadata(pha4ge_metadata_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
     """Configure output metadata spreadsheet for upload to GISAID repository 
     from input PHA4GE standard"""
     gisaid_fields = {
         ("submitter", "Submitter"): SUBMITTER,
         ("fn", "FASTA filename"): "all_sequences.fasta",
-        ("covv_virus_name", "Virus name"): df["gisaid_virus_name"],
+        ("covv_virus_name", "Virus name"): pha4ge_metadata_df["gisaid_virus_name"],
         ("covv_type", "Type"): "betacoronavirus",
         ("covv_passage", "Passage details/history"): "Original",
-        ("covv_collection_date", "Collection date"): df["sample_collection_date"],
-        ("covv_location", "Location"): df["geo_loc_name_county_region"],
+        ("covv_collection_date", "Collection date"): pha4ge_metadata_df["sample_collection_date"],
+        ("covv_location", "Location"): pha4ge_metadata_df["geo_loc_name_county_region"],
         ("covv_add_location", "Additional location information"): None,
         ("covv_host", "Host"): "Human",
         ("covv_add_host_info", "Additional host information"): None,
-        ("covv_sampling_strategy", "Sampling Strategy"): df['purpose_of_sequencing'],
+        ("covv_sampling_strategy", "Sampling Strategy"): pha4ge_metadata_df['purpose_of_sequencing'],
         ("covv_gender", "Gender"): "unknown",
         ("covv_patient_age", "Patient age"): "unknown",
         ("covv_patient_status", "Patient status"): "unknown",
@@ -428,11 +428,11 @@ def get_gisaid_metadata(df: pd.DataFrame, logger: logging.Logger) -> pd.DataFram
         ("covv_outbreak", "Outbreak"): None,
         ("covv_last_vaccinated", "Last vaccinated"): None,
         ("covv_treatment", "Treatment"): None,
-        ("covv_seq_technology", "Sequencing technology"): df["sequencing_instrument"],
+        ("covv_seq_technology", "Sequencing technology"): pha4ge_metadata_df["sequencing_instrument"],
         ("covv_assembly_method", "Assembly method"): (
-            df['consensus_sequence_software_version'].apply(lambda x: f"iVar v{x}")
+            pha4ge_metadata_df['consensus_sequence_software_version'].apply(lambda x: f"iVar v{x}")
         ),
-        ("covv_coverage", "Coverage"): df['depth_of_coverage_value'],
+        ("covv_coverage", "Coverage"): pha4ge_metadata_df['depth_of_coverage_value'],
         (
             "covv_orig_lab",
             "Originating lab",
@@ -475,30 +475,41 @@ def format_collection_date(date_col: pd.Series) -> pd.Series:
     return formatted_date_col
 
 
-def get_biosample_metadata(pha4ge_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
+def format_ictv_isolate(specimen_col: pd.Series) -> pd.Series:
+    """Reformat pha4ge specimen_collector_sample_id into 
+    ISTC format isolate name"""
+    formatted_specimen_col = specimen_col.apply(
+        lambda x: f"SARS-CoV-2/Human/USA/{x}/{TODAY[:4]}"
+    )
+    return formatted_specimen_col
+
+
+def get_biosample_metadata(pha4ge_metadata_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
     """Configure output metadata spreadsheet for upload to NCBI BioSample 
     database from input PHA4GE standard"""
     biosample_fields = {
-        'sample_name': pha4ge_df['specimen_collector_sample_id'],
-        'bioproject_accession': pha4ge_df['bioproject_accession'],
-        # 'umbrella_bioproject_accession': pha4ge_df['bioproject_umbrella_accession'],
-        'organism': pha4ge_df['organism'],
-        'collected_by': pha4ge_df['sample_collected_by'],
-        'collection_date': format_collection_date(pha4ge_df['sample_collection_date']),
+        'sample_name': pha4ge_metadata_df['specimen_collector_sample_id'],
+        'bioproject_accession': pha4ge_metadata_df['bioproject_accession'],
+        # 'umbrella_bioproject_accession': pha4ge_metadata_df['bioproject_umbrella_accession'],
+        'organism': pha4ge_metadata_df['organism'],
+        'collected_by': pha4ge_metadata_df['sample_collected_by'],
+        'collection_date': format_collection_date(pha4ge_metadata_df['sample_collection_date']),
         'geo_loc_name': (
-            pha4ge_df['geo_loc_name_county_region'].str.split(' / ', expand=True)[1:]
-            .agg(': ',join, axis=1)
+            pha4ge_metadata_df['geo_loc_name_county_region'].str.split(' / ', expand=True).iloc[:, 1:]
+            .fillna('').agg(': '.join, axis=1).str.strip(': ')
         ),
-        'host': pha4ge_df['host_scientific_name'],
-        'host_disease': pha4ge_df['host_disease'],
-        'isolate': pha4ge_df['specimen_collector_sample_id'].apply(
-            lambda x: f"SARS-CoV-2/Human/USA/{X}/{TODAY[:4]}"
+        'host': pha4ge_metadata_df['host_scientific_name'],
+        'host_disease': pha4ge_metadata_df['host_disease'],
+        'isolate': format_ictv_isolate(
+            pha4ge_metadata_df['specimen_collector_sample_id']
         ),
         'isolation_source': 'Clinical/Nasal Swab',
-        'gisaid_accession': pha4ge_df['gisaid_accession'],
-        'gisaid_virus_name': pha4ge_df['gisaid_virus_name'],
-        'purpose_of_sequencing': pha4ge_df['purpose_of_sequencing'],
-        'sequenced_by': pha4ge_df['sequence_submitted_by'],
+        # Going to have to leave out the GISAID accession field for now;
+        # can't figure out how to easily accommodate that within this script
+        # 'gisaid_accession': pha4ge_metadata_df['gisaid_accession'],
+        'gisaid_virus_name': pha4ge_metadata_df['gisaid_virus_name'],
+        'purpose_of_sequencing': pha4ge_metadata_df['purpose_of_sequencing'],
+        'sequenced_by': pha4ge_metadata_df['sequence_submitted_by'],
     }
     biosample_metadata_df = pd.DataFrame(biosample_fields)
     biosample_metadata_df.rename(columns={
@@ -509,11 +520,22 @@ def get_biosample_metadata(pha4ge_df: pd.DataFrame, logger: logging.Logger) -> p
     return biosample_metadata_df
 
 
-def get_genbank_metadata(merged_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
+def get_genbank_metadata(pha4ge_metadata_df: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
     """Configure output metadata spreadsheet for upload to GenBank repository 
     from input PHA4GE standard"""
     genbank_fields = {
-
+        'sequence_ID': pha4ge_metadata_df['specimen_collector_sample_id'],
+        'isolate': format_ictv_isolate(
+            pha4ge_metadata_df['specimen_collector_sample_id']
+        ),
+        'collection-date': format_collection_date(
+            pha4ge_metadata_df['sample_collection_date']
+        ),
+        'host': 'Homo sapiens',
+        'country': 'USA: Washington',
+        'isolation-source': 'Nasal swab',
+        'BioProject Accession': pha4ge_metadata_df['bioproject_accession'],
+        'BioSample Accession': pha4ge_metadata_df['biosample_accession'],
     }
     genbank_metadata_df = pd.DataFrame(genbank_fields)
     return genbank_metadata_df
@@ -769,7 +791,7 @@ def main():
     pha4ge_metadata_df = get_pha4ge_metadata(
         merged_df[~merged_df["wa_no"].isin(failed_samples)],
         logger
-    ).set_index('specimen_collector_sample_id', drop=True)
+    )#.set_index('specimen_collector_sample_id', drop=True)
     # gisaid_metadata_df = (
     #     get_gisaid_metadata(pha4ge_metadata_df, logger)
     #     .droplevel(1, axis=1)
@@ -783,20 +805,33 @@ def main():
     # )
 
     # quick test; delete later
-    blank_df = pd.DataFrame({})
-    gisaid_metadata_df, genbank_metadata_df = blank_df.copy(), blank_df.copy()
+    # blank_df = pd.DataFrame({})
+    # gisaid_metadata_df, genbank_metadata_df = blank_df.copy(), blank_df.copy()
     # end suspect block
 
+    gisaid_metadata_df = get_gisaid_metadata(pha4ge_metadata_df, logger)
+    biosample_metadata_df = get_biosample_metadata(pha4ge_metadata_df, logger)
+    genbank_metadata_df = get_genbank_metadata(pha4ge_metadata_df, logger)
+
     pha4ge_outpath = os.path.join(OUTDIR, "pha4ge_metadata.csv")
-    pha4ge_outpath, gisaid_outpath, genbank_outpath = (
+    pha4ge_outpath, gisaid_outpath, biosample_outpath, genbank_outpath = (
         os.path.join(OUTDIR, filename) for filename in 
-        ('pha4ge_metadata.csv', 'gisaid_metadata.csv', 'genbank_metadata.csv')
+        ('pha4ge_metadata.csv', 'gisaid_metadata.csv', 'biosample_metadata.csv', 'genbank_metadata.csv')
     )
-    for metadata_df, metadata_table_name, outpath in zip(
-        (pha4ge_metadata_df, gisaid_metadata_df, genbank_metadata_df),
-        ("PHA4GE", "GISAID", "GenBank"),
-        (pha4ge_outpath, gisaid_outpath, genbank_outpath)
+
+    # A brief block to provide any final formatting to metadata files
+    # pha4ge_metadata_df.set_index('specimen_collector_sample_id', drop=True, inplace=True)
+    # biosample_metadata_df.set_index('sample_name', drop=True, inplace=True)
+    # genbank_metadata_df.set_index('sequence_ID', drop=True, inplace=True)
+
+    for metadata_df, new_index, metadata_table_name, outpath in zip(
+        (pha4ge_metadata_df, gisaid_metadata_df, biosample_metadata_df, genbank_metadata_df),
+        ('specimen_collector_sample_id', ("submitter", "Submitter"), 'sample_name', 'sequence_ID'),
+        ("PHA4GE", "GISAID", "BioSample", "GenBank"),
+        (pha4ge_outpath, gisaid_outpath, biosample_outpath, genbank_outpath),
     ):
+        if metadata_table_name != "GISAID":
+            metadata_df.set_index(new_index, drop=True, inplace=True)
         metadata_df.to_csv(outpath)
         logger.info(f"{metadata_table_name} metadata file written to {outpath}")
 
