@@ -445,13 +445,7 @@ def get_gisaid_metadata(pha4ge_metadata_df: pd.DataFrame, logger: logging.Logger
         ): "Washington State Department of Health Public Health Laboratories",
         ("covv_subm_lab_addr", "Address"): "1610 NE 150th St., Shoreline, WA 98155",
         ("covv_subm_sample_id", "Sample ID given by the submitting laboratory"): None,
-        ("covv_authors", "Authors",): (
-            "Drew MacKellar, Philip Dykema, Denny Russell, "
-            "Lisa Jones, Holly Halstead, "
-            "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
-            "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
-            "Avi Singh, Rebecca Cao"
-        ),
+        ("covv_authors", "Authors",): AUTHORS,
         ("covv_comment", "Comment"): None,
         ("comment_type", "Comment Icon"): None,
     }
