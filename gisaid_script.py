@@ -156,8 +156,8 @@ TODAY = datetime.now().strftime("%Y-%m-%d")
 DEFAULT_AUTHORS = (
             "Drew MacKellar, Philip Dykema, Denny Russell, "
             "Lisa Jones, Holly Halstead, "
-            "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
-            "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
+            "Kathryn Sickles, Kristin Roche, Ardizon Valdez, "
+            "Claire Howell, Alex Lathum, JohnAric Peterson, "
             "Avi Singh, Rebecca Cao"
 ) 
 AUTHORS_PATH = user_args.get('author_list')
