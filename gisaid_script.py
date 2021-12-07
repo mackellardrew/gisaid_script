@@ -356,8 +356,8 @@ def prep_metadata(df: pd.DataFrame):
         ("covv_authors", "Authors",): (
             "Drew MacKellar, Philip Dykema, Denny Russell, "
             "Lisa Jones, Holly Halstead, "
-            "Joenice Gonzalez, Hannah Gray, Geoff Melly, "
-            "Vanessa De Los Santos, Darren Lucas, JohnAric Peterson, "
+            "Kathryn Sickles, Kristin Roche, Ardizon Valdez, "
+            "Claire Howell, Alex Lathum, JohnAric Peterson, "
             "Avi Singh, Rebecca Cao"
         ),
         ("covv_comment", "Comment"): None,
