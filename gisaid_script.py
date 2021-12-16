@@ -499,7 +499,11 @@ def get_vocs():
         _, voc_ext = os.path.splitext(VOC_LIST)
         voc_df = EXTENSION_HANDLERS.get(voc_ext)(VOC_LIST)
         voc_values = voc_df.T.values
-        vocs, vois = voc_values[0], voc_values[1]
+        try:
+            vocs, vois = voc_values[0], voc_values[1]
+        except IndexError:
+            vocs = voc_values[0]
+            vois = vocs
     else:
         vocs, vois = [], []
     return vocs, vois
