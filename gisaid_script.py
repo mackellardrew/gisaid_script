@@ -774,11 +774,13 @@ def main():
     )
     failed_samples = samples_missing_data + bad_samples
 
-    # _, download_stderrs = download_assemblies(
-    #     merged_df[~merged_df["wa_no"].isin(failed_samples)]
-    # )
-    # missing_genomes = handle_missing_genomes(merged_df, download_stderrs, logger)
-    # failed_samples.extend(missing_genomes)
+    # download_stderrs = dict()
+    _, download_stderrs = download_assemblies(
+        merged_df[~merged_df["wa_no"].isin(failed_samples)]
+    )
+
+    missing_genomes = handle_missing_genomes(merged_df, download_stderrs, logger)
+    failed_samples.extend(missing_genomes)
     fasta_generation_errs = generate_fasta(
         merged_df[~merged_df["wa_no"].isin(failed_samples)], logger
     )
@@ -787,17 +789,15 @@ def main():
         merged_df[~merged_df["wa_no"].isin(failed_samples)],
         logger
     )#.set_index('specimen_collector_sample_id', drop=True)
-    # gisaid_metadata_df = (
-    #     get_gisaid_metadata(pha4ge_metadata_df, logger)
-    #     .droplevel(1, axis=1)
-    #     .set_index("submitter")
-    # )
-    # # Next step is to generate genbank_metadata_df
-    # genbank_metadata_df = (
-    #     get_genbank_metadata(pha4ge_metadata_df, logger)
-    #     .droplevel(1, axis=1)
-    #     .set_index('submitter')
-    # )
+    gisaid_metadata_df = (
+        get_gisaid_metadata(pha4ge_metadata_df, logger)
+        .droplevel(1, axis=1)
+        .set_index("submitter")
+    )
+    # Next step is to generate genbank_metadata_df
+    genbank_metadata_df = (
+        get_genbank_metadata(pha4ge_metadata_df, logger)
+    )
 
     # quick test; delete later
     # blank_df = pd.DataFrame({})

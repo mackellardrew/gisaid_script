@@ -53,6 +53,23 @@
             ]
         },
         {
+            "name": "pha4ge_test_20220121",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/pha4ge_test_20220121",
+            "args": [
+                "dmack_33",
+                // "-d",
+                // "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20210901_dashboard_dump.xlsx",
+                // "-t",
+                // "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV047-VH00453-210813.tsv",
+                // "-o",
+                // "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/folderno_specimenID_test",
+            ]
+        },
+        {
             "name": "genome_qc",
             "type": "python",
             "request": "launch",
