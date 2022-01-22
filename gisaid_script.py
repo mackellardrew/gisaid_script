@@ -733,7 +733,7 @@ def main():
     """Run the functions of this script in order, to process data in 
     preparation for uploading to GISAID"""
     print()
-    Path(OUTDIR).mkdir(exist_ok=True)
+    pathlib.Path(OUTDIR).mkdir(exist_ok=True)
     logger = setup_logger(OUTDIR)
     dashboard_df = load_tables(DASHBOARD_TABLE)
     terra_df = load_tables(TERRA_TABLE, terra_table=True)
