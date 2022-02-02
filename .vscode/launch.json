@@ -58,7 +58,8 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/pha4ge_test_20220121",
+            // "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/pha4ge_test_20220121",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/20220201",
             "args": [
                 "dmack_33",
                 // "-d",

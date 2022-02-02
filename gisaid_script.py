@@ -351,6 +351,7 @@ def handle_reasons(reason: str) -> str:
         "Travel associated": "Travel-associated surveillance",
         "Other": "Not Provided",
         "S-dropout": "Screening for Variants of Concern (VOC)",
+        "Sentinel surveillance": "Baseline surveillance (random sampling)",
     }
     pha4ge_reason = reasons_map.get(reason)
     return pha4ge_reason
@@ -774,10 +775,10 @@ def main():
     )
     failed_samples = samples_missing_data + bad_samples
 
-    # download_stderrs = dict()
-    _, download_stderrs = download_assemblies(
-        merged_df[~merged_df["wa_no"].isin(failed_samples)]
-    )
+    download_stderrs = dict()
+    # _, download_stderrs = download_assemblies(
+    #     merged_df[~merged_df["wa_no"].isin(failed_samples)]
+    # )
 
     missing_genomes = handle_missing_genomes(merged_df, download_stderrs, logger)
     failed_samples.extend(missing_genomes)
