@@ -820,7 +820,7 @@ def main():
 
     for metadata_df, new_index, metadata_table_name, outpath in zip(
         (pha4ge_metadata_df, gisaid_metadata_df, biosample_metadata_df, genbank_metadata_df),
-        ('specimen_collector_sample_id', ("submitter", "Submitter"), 'sample_name', 'sequence_ID'),
+        ('specimen_collector_sample_id', 'submitter', 'sample_name', 'sequence_ID'),
         ("PHA4GE", "GISAID", "BioSample", "GenBank"),
         (pha4ge_outpath, gisaid_outpath, biosample_outpath, genbank_outpath),
     ):
