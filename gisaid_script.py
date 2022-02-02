@@ -804,7 +804,6 @@ def main():
     # gisaid_metadata_df, genbank_metadata_df = blank_df.copy(), blank_df.copy()
     # end suspect block
 
-    gisaid_metadata_df = get_gisaid_metadata(pha4ge_metadata_df, logger)
     biosample_metadata_df = get_biosample_metadata(pha4ge_metadata_df, logger)
     genbank_metadata_df = get_genbank_metadata(pha4ge_metadata_df, logger)
 
