@@ -16,6 +16,7 @@ from glob import glob
 from datetime import datetime
 from IPython.display import display
 from logging.handlers import RotatingFileHandler
+from typing import Tuple
 
 # from tqdm import tqdm
 
@@ -96,6 +97,17 @@ parser.add_argument(
     default="gsutil",
 )
 parser.add_argument(
+    "-s",
+    "--skip",
+    help=(
+        "Skip downloading assemblies; assumes they're present in this dir "
+        "in a subdir named 'assemblies'"
+    ),
+    type=bool,
+    dest="skip_assembly_download",
+    default=False,
+)
+parser.add_argument(
     "--no_auto_qc",
     help=("If TRUE, ignore genome QC criteria in generating outputs"),
     type=bool,
@@ -143,6 +155,7 @@ VOC_LIST = user_args.get("voc_list")
 GSUTIL_PATH = user_args.get("gsutil_path")
 NO_AUTO_QC = user_args.get("no_auto_qc")
 WORKFLOW = user_args.get("workflow").lower()
+SKIP_ASSEMBLY_DOWNLOAD = user_args.get('skip_assembly_download')
 
 ASSEMBLY_DIR = os.path.join(OUTDIR, "assemblies")
 EXTENSION_HANDLERS = {
@@ -155,7 +168,7 @@ EXTENSION_HANDLERS = {
 TODAY = datetime.now().strftime("%Y-%m-%d")
 DEFAULT_AUTHORS = (
             "Drew MacKellar, Philip Dykema, Denny Russell, "
-            "Lisa Jones, Holly Halstead, "
+            "Holly Halstead, "
             "Kathryn Sickles, Kristin Roche, Ardizon Valdez, "
             "Claire Howell, Alex Lathum, JohnAric Peterson, "
             "Avi Singh, Rebecca Cao"
@@ -168,7 +181,7 @@ else:
     AUTHORS = DEFAULT_AUTHORS
 
 
-def setup_logger(output_dir):
+def setup_logger(output_dir: str) -> logging.Logger:
     """Returns a logger object writing to 'gisaid_script_logs.txt'."""
     log_filename = "gisaid_script_logs.txt"
     formatter = logging.Formatter(
@@ -184,7 +197,7 @@ def setup_logger(output_dir):
     return logger
 
 
-def load_tables(table_list, terra_table=False):
+def load_tables(table_list: list, terra_table=False) -> pd.DataFrame:
     """Load input tables and consolidate into pandas DataFrames"""
 
     def load_single_table(filepath):
@@ -209,7 +222,7 @@ def load_tables(table_list, terra_table=False):
 
 def merge_tables(
     terra_df: pd.DataFrame, dashboard_df: pd.DataFrame, logger: logging.Logger
-):
+) -> pd.DataFrame:
     """Merges the Dashboard and Terra tables, and reformats slightly"""
     pattern = ".*(WA[0-9]{7}).*"
     terra_df["wa_no"] = terra_df["sample_name"].str.extract(pattern)
@@ -239,7 +252,7 @@ def merge_tables(
     return merged_df
 
 
-def get_column_map(workflow: str):
+def get_column_map(workflow: str) -> dict:
     cols_needed = (
         "sequence",
         "coverage",
@@ -269,7 +282,7 @@ def get_column_map(workflow: str):
     return workflow_cols[workflow]
 
 
-def auto_qc(merged_df: pd.DataFrame, logger: logging.Logger):
+def auto_qc(merged_df: pd.DataFrame, logger: logging.Logger) -> list:
     conditions = merged_df[col_names.get("coverage")] < 60
     key_metrics = [col_names.get("coverage")]
     bad_samples = merged_df[conditions]["wa_no"].dropna().tolist()
@@ -289,7 +302,7 @@ def auto_qc(merged_df: pd.DataFrame, logger: logging.Logger):
     return bad_samples
 
 
-def download_assemblies(merged_df: pd.DataFrame):
+def download_assemblies(merged_df: pd.DataFrame) -> Tuple[dict, dict]:
     """For each sample represented in the Terra results, attempts to 
     download the corresponding genome assembly"""
 
@@ -341,19 +354,48 @@ def get_platform(sample_index: str) -> str:
     return instrument_type
 
 
+def get_collecting_lab_address(lab_name: str) -> str:
+    """Fetch the address of the submitting lab, if available"""
+    lab_addr_map = {
+        'atlas genomics': (
+            '2296 W. Commodore Way, Suite 220, Seattle, WA 98199, USA'
+        ),
+        'confluence': (
+            '1201 South Miller St Wenatchee, WA 98801, USA'
+        ),
+        'incyte diagnostics spokane': (
+            '15912 East Marietta Avenue, Suite 200, '
+            'Spokane Valley, WA 99216, USA'
+        ),
+        'interpath laboratory': (
+            '8660 Emerald St # 102, Boise, ID 83704, USA'
+        ),
+        'northwest laboratory': (
+            '3548 Meridian St, Suite 101, Bellingham, WA 98225, USA'
+        ),
+    }
+    pha4ge_collecting_lab_addr = lab_addr_map.get(
+        lab_name.lower(), 'WA, USA'
+    )
+    return pha4ge_collecting_lab_addr
+
+
 def handle_reasons(reason: str) -> str:
     """Convert WAPHL categories of reasons for sequencing to those that fit PHA4GE standard"""
     reasons_map = {
-        "PHL Diagnostic": "Baseline surveillance (random sampling)",
-        "Suspected vaccine breakthrough": "Vaccine escape surveillance",
-        "Suspected reinfection": "Re-infection surveillance",
-        "Outbreak Investigation": "Cluster/Outbreak investigation",
-        "Travel associated": "Travel-associated surveillance",
-        "Other": "Not Provided",
-        "S-dropout": "Screening for Variants of Concern (VOC)",
-        "Sentinel surveillance": "Baseline surveillance (random sampling)",
+        "phl diagnostic": "Baseline surveillance (random sampling)",
+        "suspected vaccine breakthrough": "Vaccine escape surveillance",
+        "suspected reinfection": "Re-infection surveillance",
+        "outbreak investigation": "Cluster/Outbreak investigation",
+        "travel associated": "Travel-associated surveillance",
+        "other": "Not Provided",
+        "s-dropout": "Screening for Variants of Concern (VOC)",
+        "sentinel surveillance": "Baseline surveillance (random sampling)",
+        "pt": "DROP",
     }
-    pha4ge_reason = reasons_map.get(reason)
+    pha4ge_reason = reasons_map.get(
+        reason.lower(), "NO_REASON_FOUND"
+    )
     return pha4ge_reason
 
 
@@ -369,6 +411,9 @@ def get_pha4ge_metadata(df: pd.DataFrame, logger: logging.Logger) -> pd.DataFram
         'gisaid_accession': None,
         'gisaid_virus_name': df["seq_id"],
         'sample_collected_by': df["submittinglab"],
+        'sample_collector_contact_address': (
+            df['submittinglab'].fillna("").apply(get_collecting_lab_address)
+        ),
         'sequence_submitted_by': "Washington State Department of Health Public Health Laboratories",
         'sequence_submitter_contact_address': "1610 NE 150th St., Shoreline, WA 98155",
         'sample_collection_date': df["collected_date"],
@@ -437,9 +482,14 @@ def get_gisaid_metadata(pha4ge_metadata_df: pd.DataFrame, logger: logging.Logger
         (
             "covv_orig_lab",
             "Originating lab",
-        ): "Washington State Department of Health Public Health Laboratories",
-        ("covv_orig_lab_addr", "Address"): "1610 NE 150th St., Shoreline, WA 98155",
-        ("covv_provider_sample_id", "Sample ID given by originating laboratory"): None,
+        ): pha4ge_metadata_df['sample_collected_by'],
+        ("covv_orig_lab_addr", "Address"): (
+            pha4ge_metadata_df['sample_collector_contact_address']
+        ),
+        (
+            "covv_provider_sample_id", 
+            "Sample ID given by originating laboratory"
+        ): None,
         (
             "covv_subm_lab",
             "Submitting lab",
@@ -775,10 +825,12 @@ def main():
     )
     failed_samples = samples_missing_data + bad_samples
 
-    # download_stderrs = dict()
-    _, download_stderrs = download_assemblies(
-        merged_df[~merged_df["wa_no"].isin(failed_samples)]
-    )
+    if SKIP_ASSEMBLY_DOWNLOAD:
+        download_stderrs = dict()
+    else:
+        _, download_stderrs = download_assemblies(
+            merged_df[~merged_df["wa_no"].isin(failed_samples)]
+        )
 
     missing_genomes = handle_missing_genomes(merged_df, download_stderrs, logger)
     failed_samples.extend(missing_genomes)
@@ -790,6 +842,9 @@ def main():
         merged_df[~merged_df["wa_no"].isin(failed_samples)],
         logger
     )#.set_index('specimen_collector_sample_id', drop=True)
+    drop_reasons = pha4ge_metadata_df[
+        pha4ge_metadata_df['purpose_of_sequencing'] == 'DROP'
+    ]
     gisaid_metadata_df = (
         get_gisaid_metadata(pha4ge_metadata_df, logger)
         .droplevel(1, axis=1)

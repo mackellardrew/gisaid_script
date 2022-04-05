@@ -62,6 +62,8 @@
             "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/20220201",
             "args": [
                 "dmack_33",
+                "-s",
+                "True",
                 // "-d",
                 // "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20210901_dashboard_dump.xlsx",
                 // "-t",
