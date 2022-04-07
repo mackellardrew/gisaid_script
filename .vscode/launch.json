@@ -56,7 +56,9 @@
             "name": "pha4ge_test_20220121",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            // "program": "${file}",
+            "program": "${workspaceRoot}/gisaid_script/__init__.py",
+            // "program": "python /mnt/c/Notebooks/gisaid_script/gisaid_script/__init__.py",
             "console": "integratedTerminal",
             // "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/pha4ge_test_20220121",
             "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/20220201",
@@ -70,7 +72,11 @@
                 // "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV047-VH00453-210813.tsv",
                 // "-o",
                 // "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/folderno_specimenID_test",
-            ]
+            ],
+            "env": {"PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"},
+            // "env": {
+            //     "PATH": "${env:PYTHONPATH};/mnt/c/Notebooks/gisaid_script;"
+            // }
         },
         {
             "name": "genome_qc",
