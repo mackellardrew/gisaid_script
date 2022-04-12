@@ -214,6 +214,9 @@ def get_collecting_lab_address(lab_name: str) -> str:
         'northwest laboratory': (
             '3548 Meridian St, Suite 101, Bellingham, WA 98225, USA'
         ),
+        'wa phl': (
+            '1610 NE 150th St., Shoreline, WA 98155'
+        ),
     }
     pha4ge_collecting_lab_addr = lab_addr_map.get(
         lab_name.lower(), 'WA, USA'
