@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"python.pythonPath": "/home/dcm0303/python/envs/terra_gisaid/bin/python",
+		"python.terminal.activateEnvironment": true,
+	}
+}

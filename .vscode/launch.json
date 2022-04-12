@@ -1,0 +1,301 @@
+{
+    "version": "0.2.0",
+    "compounds": [
+        {
+            "name": "Launch gisaid_tests",
+            "python.pythonPath": "/home/dcm0303/python/envs/cloud/bin/python",
+            "configurations": [
+                "genome_qc",
+                "print_help",
+                "basic_test_lang",
+                "basic_test_titan",
+                "missing_data",
+                // "no_submitter",
+                "multiple_tables_search",
+                "multiple_tables_indir",
+                "specific_tables",
+                "bad_counties",
+                "bad_assembly_paths",
+                "with_vocs",
+            ],
+        },
+        {
+            "name": "bad_counties_test",
+            "python.pythonPath": "/home/dcm0303/miniconda3/envs/cloud",
+            "configurations": [
+                "bad_counties_test_20210804",
+            ],
+        },
+        {
+            "name": "pha4ge_metadata_test",
+            "python.pythonPath": "/home/dcm0303/miniconda3/envs/cloud",
+            "configurations": [
+                "pha4ge_metadata_test_1",
+            ],
+        },
+    ],
+    "configurations": [
+        {
+            "name": "folderno_specimenID_test",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/folderno_specimenID_test",
+            "args": [
+                "dmack_33",
+                "-d",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20210901_dashboard_dump.xlsx",
+                "-t",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV047-VH00453-210813.tsv",
+                "-o",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/folderno_specimenID_test",
+            ]
+        },
+        {
+            "name": "pha4ge_test_20220121",
+            "type": "python",
+            "request": "launch",
+            // "program": "${file}",
+            "program": "${workspaceRoot}/gisaid_script/__init__.py",
+            // "program": "python /mnt/c/Notebooks/gisaid_script/gisaid_script/__init__.py",
+            "console": "integratedTerminal",
+            // "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/pha4ge_test_20220121",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/20220201",
+            "args": [
+                "dmack_33",
+                "-s",
+                "True",
+                // "-d",
+                // "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20210901_dashboard_dump.xlsx",
+                // "-t",
+                // "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV047-VH00453-210813.tsv",
+                // "-o",
+                // "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/folderno_specimenID_test",
+            ],
+            "env": {"PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"},
+            // "env": {
+            //     "PATH": "${env:PYTHONPATH};/mnt/c/Notebooks/gisaid_script;"
+            // }
+        },
+        {
+            "name": "genome_qc",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/genome_qc",
+            "args": [
+                "dmack_33",
+            ]
+        },
+        {
+            "name": "bad_counties",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties",
+            "args": [
+                "dmack_33",
+            ]
+        },
+        {
+            "name": "bad_assembly_paths",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_assemb_paths",
+            "args": [
+                "dmack_33",
+            ],
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "with_vocs",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/with_vocs",
+            "args": [
+                "dmack_33",
+                "-v",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/20210414_dummy_voc_list.xlsx",
+                "--indir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/with_vocs",
+            ],
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "missing_data",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/missing_data",
+            "args": [
+                "dmack_33"
+            ],
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "print_help",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/dummy_dir",
+            "args": [
+                "-h"
+            ],
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "basic_test_lang",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test_lang",
+            "args": [
+                "dmack_33",
+                "--workflow",
+                "lang"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "basic_test_titan",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test_titan",
+            "args": [
+                "dmack_33",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "basic_test_titan_large",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/basic_test_titan_large",
+            "args": [
+                "dmack_33",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "no_submitter",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "--indir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/no_submitter",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "multiple_tables_search",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_search",
+            "args": [
+                "dmack_33",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "multiple_tables_indir",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/dummy_dir",
+            "args": [
+                "dmack_33",
+                "--indir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_search",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_indir",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "specific_tables",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/dummy_dir",
+            "args": [
+                "dmack_33",
+                "--terra",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_search/CoV024-M5130-210315_terra.tsv",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/multiple_tables_search/CoV025-M4796-210318_terra.tsv",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/specific_tables/CoV026-M4796-210322.tsv",
+                "--dashboard",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/specific_tables/20210323_dashboard_dump.xlsx",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/specific_tables",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "bad_counties_test_20210804",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties",
+            "args": [
+                "dmack_33",
+                "--terra",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV046-VH00442-210731_subset.tsv",
+                "--dashboard",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20210804_dashboard_dump.xlsx",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties",
+                "--gsutil",
+                "/home/dcm0303/miniconda3/envs/cloud/bin/gsutil",
+            ]
+        },
+        {
+            "name": "bad_counties_test_two",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties",
+            "args": [
+                "dmack_33",
+                "--terra",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV046-VH00442-210731.tsv",
+                "--dashboard",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20210804_dashboard_dump.xlsx",
+                "--outdir",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties_2",
+                "--gsutil",
+                "/home/dcm0303/miniconda3/envs/cloud/bin/gsutil",
+            ]
+        },
+        {
+            "name": "pha4ge_metadata_test_1",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/pha4ge_metadata_test_1",
+            "args": [
+                "dmack_33",
+                "--terra",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/terra_results/CoV046-VH00442-210731.tsv",
+                "--dashboard",
+                "/mnt/c/Data/SARS_CoV_2_sequencing/dashboard_dumps/20211011_dashboard_dump.xlsx",
+                // "--outdir",
+                // "/mnt/c/Data/SARS_CoV_2_sequencing/gisaid_script_tests/bad_counties_2",
+                "--gsutil",
+                "/home/dcm0303/miniconda3/envs/cloud/bin/gsutil",
+            ],
+        },
+    ],
+}

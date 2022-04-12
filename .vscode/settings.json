@@ -1,0 +1,7 @@
+{
+    "python.pythonPath": "/home/dcm0303/python/envs/terra_gisaid/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}"
+    }
+}
