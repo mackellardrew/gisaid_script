@@ -1,5 +1,4 @@
 """Console script for gisaid_script."""
-import argparse
 import sys
 import gisaid_script
 
